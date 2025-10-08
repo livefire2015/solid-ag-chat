@@ -1,4 +1,4 @@
-# @torpago/solid-ag-chat
+# @livefire2015/solid-ag-chat
 
 SolidJS chat components for AG-UI protocol integration with PydanticAI.
 
@@ -14,7 +14,7 @@ SolidJS chat components for AG-UI protocol integration with PydanticAI.
 ## Installation
 
 ```bash
-npm install @torpago/solid-ag-chat
+npm install @livefire2015/solid-ag-chat
 ```
 
 ## Peer Dependencies
@@ -28,7 +28,7 @@ npm install solid-js
 ## Quick Start
 
 ```tsx
-import { ChatInterface } from '@torpago/solid-ag-chat';
+import { ChatInterface } from '@livefire2015/solid-ag-chat';
 
 function App() {
   return (
@@ -44,7 +44,7 @@ function App() {
 The main chat component that includes all sub-components.
 
 ```tsx
-import { ChatInterface } from '@torpago/solid-ag-chat';
+import { ChatInterface } from '@livefire2015/solid-ag-chat';
 
 <ChatInterface apiUrl="http://localhost:8000/agent/stream" />
 ```
@@ -57,7 +57,7 @@ import { ChatInterface } from '@torpago/solid-ag-chat';
 Displays the list of chat messages.
 
 ```tsx
-import { MessageList } from '@torpago/solid-ag-chat';
+import { MessageList } from '@livefire2015/solid-ag-chat';
 
 <MessageList
   messages={messages()}
@@ -70,7 +70,7 @@ import { MessageList } from '@torpago/solid-ag-chat';
 Text input for sending messages.
 
 ```tsx
-import { MessageInput } from '@torpago/solid-ag-chat';
+import { MessageInput } from '@livefire2015/solid-ag-chat';
 
 <MessageInput
   onSendMessage={handleSend}
@@ -83,7 +83,7 @@ import { MessageInput } from '@torpago/solid-ag-chat';
 Side panel for visualizing agent state.
 
 ```tsx
-import { StatePanel } from '@torpago/solid-ag-chat';
+import { StatePanel } from '@livefire2015/solid-ag-chat';
 
 <StatePanel agentState={agentState()} />
 ```
@@ -95,7 +95,7 @@ import { StatePanel } from '@torpago/solid-ag-chat';
 A reactive service for managing chat state and AG-UI protocol communication.
 
 ```tsx
-import { createAGUIService } from '@torpago/solid-ag-chat';
+import { createAGUIService } from '@livefire2015/solid-ag-chat';
 
 const chatService = createAGUIService('http://localhost:8000/agent/stream');
 
@@ -134,7 +134,7 @@ import type {
   AGUIEvent,
   AgentState,
   ChatService
-} from '@torpago/solid-ag-chat';
+} from '@livefire2015/solid-ag-chat';
 ```
 
 ## Styling
@@ -161,4 +161,4 @@ MIT
 
 ## Author
 
-Torpago
+livefire2015
