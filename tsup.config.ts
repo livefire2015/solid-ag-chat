@@ -10,7 +10,6 @@ export default defineConfig({
   treeshake: false,
   splitting: false,
   esbuildOptions(options) {
-    options.jsx = 'automatic';
-    options.jsxImportSource = 'solid-js';
+    options.jsx = 'preserve';
   },
 });
