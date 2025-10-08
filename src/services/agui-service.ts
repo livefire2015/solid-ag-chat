@@ -17,7 +17,7 @@ export interface ChatService {
 }
 
 export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/stream'): ChatService {
-  const [messages, setMessages] = createSignal<AGUIMessage[]>([]);
+  const [messages, setMessages] = createSignal<AGUIMessage[]>([], { equals: false });
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [agentState, setAgentState] = createSignal<AgentState | null>(null);
@@ -99,9 +99,13 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                 } else {
                   setMessages((prev) => {
                     const updated = [...prev];
-                    const lastMsg = updated[updated.length - 1];
-                    if (lastMsg && lastMsg.role === 'assistant') {
-                      lastMsg.content = currentAssistantMessage;
+                    const lastIdx = updated.length - 1;
+                    if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                      // Create NEW object instead of mutating for SolidJS reactivity
+                      updated[lastIdx] = {
+                        ...updated[lastIdx],
+                        content: currentAssistantMessage
+                      };
                     }
                     return updated;
                   });
@@ -112,9 +116,14 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                 currentAssistantMessage += event.delta;
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const lastMsg = updated[updated.length - 1];
-                  if (lastMsg && lastMsg.role === 'assistant') {
-                    lastMsg.content = currentAssistantMessage;
+                  const lastIdx = updated.length - 1;
+
+                  if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                    // Create NEW object instead of mutating for SolidJS reactivity
+                    updated[lastIdx] = {
+                      ...updated[lastIdx],
+                      content: currentAssistantMessage
+                    };
                   } else {
                     updated.push({
                       role: 'assistant',
