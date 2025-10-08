@@ -184,3 +184,164 @@ export interface AGUITool {
   description: string;
   parameters: Record<string, unknown>;
 }
+
+// File Attachment Types
+export interface FileAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url?: string;
+  data?: string | ArrayBuffer;
+  uploadProgress?: number;
+  uploaded: boolean;
+  error?: string;
+  preview?: string;
+}
+
+export type FileAttachmentStatus = 'pending' | 'uploading' | 'uploaded' | 'error';
+
+// Enhanced Message Types
+export interface EnhancedAGUIMessage extends AGUIMessage {
+  id: string;
+  conversationId: string;
+  attachments?: FileAttachment[];
+  isMarkdown?: boolean;
+  isEdited?: boolean;
+  editedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type MessageAction = 'copy' | 'edit' | 'delete' | 'retry' | 'react';
+
+// Conversation Types
+export interface Conversation {
+  id: string;
+  title: string;
+  description?: string;
+  messages: EnhancedAGUIMessage[];
+  createdAt: string;
+  updatedAt: string;
+  tags?: string[];
+  archived?: boolean;
+  starred?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  description?: string;
+  messageCount: number;
+  lastMessageAt: string;
+  createdAt: string;
+  tags?: string[];
+  archived?: boolean;
+  starred?: boolean;
+}
+
+// Theme Types
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export interface ThemeColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  text: string;
+  textSecondary: string;
+  border: string;
+  error: string;
+  warning: string;
+  success: string;
+  info: string;
+}
+
+export interface Theme {
+  mode: ThemeMode;
+  colors: {
+    light: ThemeColors;
+    dark: ThemeColors;
+  };
+  borderRadius: string;
+  fontFamily: string;
+  fontSize: {
+    xs: string;
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+  };
+}
+
+// Storage Types
+export interface StorageAdapter {
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, value: T): Promise<void>;
+  remove(key: string): Promise<void>;
+  clear(): Promise<void>;
+  keys(): Promise<string[]>;
+}
+
+// Event Types
+export interface ChatEvent {
+  type: string;
+  payload?: unknown;
+  timestamp: string;
+}
+
+export type EventCallback = (event: ChatEvent) => void;
+
+// Markdown Types
+export interface MarkdownOptions {
+  enableCodeHighlighting?: boolean;
+  enableTables?: boolean;
+  enableTaskLists?: boolean;
+  enableMath?: boolean;
+}
+
+// Configuration Types
+export interface ChatConfiguration {
+  apiUrl: string;
+  maxFileSize: number;
+  allowedFileTypes: string[];
+  enableMarkdown: boolean;
+  enableFileAttachments: boolean;
+  enableConversationHistory: boolean;
+  enableThemes: boolean;
+  autoSave: boolean;
+  maxConversations: number;
+  theme: Theme;
+  features: {
+    messageActions: boolean;
+    conversationSearch: boolean;
+    exportConversations: boolean;
+    voiceInput: boolean;
+    notifications: boolean;
+  };
+}
+
+// Plugin Types
+export interface Plugin {
+  name: string;
+  version: string;
+  description: string;
+  initialize: (config: ChatConfiguration) => void;
+  destroy: () => void;
+  onMessageSent?: (message: EnhancedAGUIMessage) => void;
+  onMessageReceived?: (message: EnhancedAGUIMessage) => void;
+  onConversationCreated?: (conversation: Conversation) => void;
+}
+
+// UI State Types
+export interface UIState {
+  sidebarOpen: boolean;
+  statePanelOpen: boolean;
+  currentConversationId: string | null;
+  selectedMessages: string[];
+  searchQuery: string;
+  filterTags: string[];
+  loading: boolean;
+  error: string | null;
+}
