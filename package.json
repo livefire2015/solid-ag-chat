@@ -1,6 +1,6 @@
 {
   "name": "@livefire2015/solid-ag-chat",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "SolidJS chat components for AG-UI protocol integration with PydanticAI",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -18,8 +18,8 @@
     "src"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "vite build && tsc --emitDeclarationOnly --outDir dist",
+    "dev": "vite build --watch",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -35,6 +35,8 @@
     "solid-js": "^1.8.0"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.4",
+    "babel-preset-solid": "^1.9.9",
     "solid-js": "^1.8.0",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0",

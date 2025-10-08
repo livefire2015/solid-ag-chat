@@ -10,6 +10,12 @@ export default defineConfig({
   treeshake: false,
   splitting: false,
   esbuildOptions(options) {
-    options.jsx = 'preserve';
+    options.jsx = 'transform';
+    options.jsxFactory = '_$createElement';
+    options.jsxFragment = '_$Fragment';
+  },
+  // Inject SolidJS helpers
+  banner: {
+    js: `import { createElement as _$createElement, Fragment as _$Fragment } from 'solid-js/web';`,
   },
 });
