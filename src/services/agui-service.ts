@@ -1,38 +1,44 @@
 import { createSignal } from 'solid-js';
 import type {
   AGUIMessage,
+  EnhancedAGUIMessage,
   AGUIEvent,
   AgentState,
   AGUIRequest,
 } from './types';
 
 export interface ChatService {
-  messages: () => AGUIMessage[];
+  messages: () => EnhancedAGUIMessage[];
   isLoading: () => boolean;
   error: () => string | null;
   agentState: () => AgentState | null;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, attachments?: File[]) => Promise<void>;
   clearMessages: () => void;
   clearAgentState: () => void;
+  loadMessages: (messages: EnhancedAGUIMessage[]) => void;
 }
 
 export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/stream'): ChatService {
-  const [messages, setMessages] = createSignal<AGUIMessage[]>([], { equals: false });
+  const [messages, setMessages] = createSignal<EnhancedAGUIMessage[]>([], { equals: false });
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [agentState, setAgentState] = createSignal<AgentState | null>(null);
 
-  const sendMessage = async (message: string) => {
+  const sendMessage = async (message: string, attachments?: File[]) => {
     if (!message.trim()) return;
 
     setIsLoading(true);
     setError(null);
 
     // Add user message immediately
-    const userMessage: AGUIMessage = {
+    const userMessage: EnhancedAGUIMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      conversationId: 'default', // For now, using default conversation
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
+      isMarkdown: false,
+      isEdited: false,
     };
     setMessages((prev) => [...prev, userMessage]);
 
@@ -89,10 +95,14 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
               case 'TEXT_MESSAGE_CONTENT':
                 currentAssistantMessage = event.content;
                 if (!assistantMessageStarted) {
-                  const assistantMsg: AGUIMessage = {
+                  const assistantMsg: EnhancedAGUIMessage = {
+                    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    conversationId: 'default',
                     role: 'assistant',
                     content: currentAssistantMessage,
                     timestamp: new Date().toISOString(),
+                    isMarkdown: true, // Assistant messages are typically markdown
+                    isEdited: false,
                   };
                   setMessages((prev) => [...prev, assistantMsg]);
                   assistantMessageStarted = true;
@@ -126,9 +136,13 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                     };
                   } else {
                     updated.push({
+                      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                      conversationId: 'default',
                       role: 'assistant',
                       content: currentAssistantMessage,
                       timestamp: new Date().toISOString(),
+                      isMarkdown: true,
+                      isEdited: false,
                     });
                     assistantMessageStarted = true;
                   }
@@ -183,6 +197,11 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
     setAgentState(null);
   };
 
+  const loadMessages = (newMessages: EnhancedAGUIMessage[]) => {
+    setMessages(newMessages);
+    setError(null);
+  };
+
   return {
     messages,
     isLoading,
@@ -191,5 +210,6 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
     sendMessage,
     clearMessages,
     clearAgentState,
+    loadMessages,
   };
 }
