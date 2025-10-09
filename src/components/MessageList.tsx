@@ -176,7 +176,7 @@ const MessageList: Component<MessageListProps> = (props) => {
                               class={`rounded-lg px-4 py-3 ${
                                 message.role === 'user'
                                   ? 'bg-blue-500 text-white ml-12'
-                                  : 'bg-white border border-gray-200 text-gray-900 mr-12'
+                                  : 'bg-green-500 text-white mr-12'
                               }`}
                             >
                               {/* Message Header */}

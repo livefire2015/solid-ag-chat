@@ -55,7 +55,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
 
   return (
     <ThemeProvider>
-      <div class="flex h-screen bg-gray-50 dark:bg-gray-900">
+      <div class="flex h-screen bg-white">
         {/* Sidebar */}
         <Show when={showConversations()}>
           <div class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
@@ -137,6 +137,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
           <MessageList
             messages={chatService.messages()}
             isLoading={chatService.isLoading()}
+            enableMarkdown={true}
           />
 
           {/* Message Input */}
