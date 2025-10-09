@@ -2,7 +2,9 @@
 export const AG_UI_EVENT_TYPES = [
   'RUN_STARTED',
   'RUN_FINISHED',
+  'TEXT_MESSAGE_START',
   'TEXT_MESSAGE_CONTENT',
+  'TEXT_MESSAGE_END',
   'TEXT_MESSAGE_DELTA',
   'TOOL_CALL_START',
   'TOOL_CALL_DELTA',
@@ -36,11 +38,21 @@ export interface AGUIToolCall {
 }
 
 // Event Interfaces
+export interface TextMessageStartEvent {
+  type: 'TEXT_MESSAGE_START';
+  messageId: string;
+  role: 'assistant' | 'user' | 'system';
+}
+
 export interface TextMessageContentEvent {
   type: 'TEXT_MESSAGE_CONTENT';
-  content: string;
-  role?: 'user' | 'assistant' | 'system';
-  timestamp?: string;
+  messageId: string;
+  delta: string;
+}
+
+export interface TextMessageEndEvent {
+  type: 'TEXT_MESSAGE_END';
+  messageId: string;
 }
 
 export interface TextMessageDeltaEvent {
@@ -127,7 +139,9 @@ export interface ContextUpdateEvent {
 
 // Union type for all events
 export type AGUIEvent =
+  | TextMessageStartEvent
   | TextMessageContentEvent
+  | TextMessageEndEvent
   | TextMessageDeltaEvent
   | ToolCallStartEvent
   | ToolCallDeltaEvent
@@ -172,10 +186,17 @@ export interface StreamEvent {
 
 // Request Types
 export interface AGUIRequest {
+  threadId: string;
+  runId: string;
+  state: any;
   messages: Array<{
+    id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
   }>;
+  tools: Array<any>;
+  context: Array<any>;
+  forwardedProps: any;
 }
 
 // Tool Definition
