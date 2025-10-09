@@ -54,5 +54,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/livefire2015/solid-ag-chat.git"
+  },
+  "dependencies": {
+    "fast-json-patch": "^3.1.1"
   }
 }

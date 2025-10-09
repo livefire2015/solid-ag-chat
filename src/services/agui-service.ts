@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js';
+import * as jsonpatch from 'fast-json-patch';
 import type {
   AGUIMessage,
   EnhancedAGUIMessage,
@@ -171,14 +172,30 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                 break;
 
               case 'STATE_SNAPSHOT':
+                // Replace entire state with snapshot
                 setAgentState(event.state);
+                console.log('State snapshot received:', event.state);
                 break;
 
               case 'STATE_DELTA':
-                setAgentState((prev) => ({
-                  ...prev,
-                  ...event.delta,
-                }));
+                // Apply JSON Patch operations to current state
+                setAgentState((prev) => {
+                  if (!prev) {
+                    console.warn('Received STATE_DELTA but no current state exists');
+                    return prev;
+                  }
+                  try {
+                    // Clone the current state to avoid mutations
+                    const stateCopy = JSON.parse(JSON.stringify(prev));
+                    // Apply the JSON Patch operations
+                    const result = jsonpatch.applyPatch(stateCopy, event.delta);
+                    console.log('Applied state delta:', event.delta, 'Result:', result.newDocument);
+                    return result.newDocument;
+                  } catch (error) {
+                    console.error('Error applying state delta:', error);
+                    return prev;
+                  }
+                });
                 break;
 
               case 'ERROR':

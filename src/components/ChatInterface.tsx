@@ -98,14 +98,6 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
                   <p class="text-sm text-gray-500 dark:text-gray-400">{props.description || "Let language become the interface"}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-2">
-                <button
-                  onClick={handleNewConversation}
-                  class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  New Chat
-                </button>
-              </div>
             </div>
           </div>
 
