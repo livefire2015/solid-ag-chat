@@ -23,6 +23,8 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [agentState, setAgentState] = createSignal<AgentState | null>(null);
+  // Persistent threadId for the entire conversation
+  const [threadId] = createSignal(crypto.randomUUID());
 
   const sendMessage = async (message: string, attachments?: File[]) => {
     if (!message.trim()) return;
@@ -49,10 +51,17 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
       // Send full conversation history (all messages including the new one)
       const allMessages = [...messages(), userMessage];
       const request: AGUIRequest = {
+        threadId: threadId(), // Persistent thread ID for conversation
+        runId: crypto.randomUUID(), // New run ID for each message
+        state: null,
         messages: allMessages.map(msg => ({
+          id: crypto.randomUUID(), // Generate unique ID for each message
           role: msg.role,
           content: msg.content,
         })),
+        tools: [],
+        context: [],
+        forwardedProps: null,
       };
 
       const response = await fetch(apiUrl, {
@@ -92,34 +101,42 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
 
             // Handle different event types
             switch (event.type) {
-              case 'TEXT_MESSAGE_CONTENT':
-                currentAssistantMessage = event.content;
+              case 'TEXT_MESSAGE_START':
+                // Initialize new assistant message
                 if (!assistantMessageStarted) {
                   const assistantMsg: EnhancedAGUIMessage = {
                     id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     conversationId: 'default',
                     role: 'assistant',
-                    content: currentAssistantMessage,
+                    content: '',
                     timestamp: new Date().toISOString(),
                     isMarkdown: true, // Assistant messages are typically markdown
                     isEdited: false,
                   };
                   setMessages((prev) => [...prev, assistantMsg]);
                   assistantMessageStarted = true;
-                } else {
-                  setMessages((prev) => {
-                    const updated = [...prev];
-                    const lastIdx = updated.length - 1;
-                    if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-                      // Create NEW object instead of mutating for SolidJS reactivity
-                      updated[lastIdx] = {
-                        ...updated[lastIdx],
-                        content: currentAssistantMessage
-                      };
-                    }
-                    return updated;
-                  });
+                  currentAssistantMessage = '';
                 }
+                break;
+
+              case 'TEXT_MESSAGE_CONTENT':
+                currentAssistantMessage += event.delta;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastIdx = updated.length - 1;
+                  if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                    updated[lastIdx] = {
+                      ...updated[lastIdx],
+                      content: currentAssistantMessage
+                    };
+                  }
+                  return updated;
+                });
+                break;
+
+              case 'TEXT_MESSAGE_END':
+                // Message is complete
+                console.log('Message ended:', currentAssistantMessage);
                 break;
 
               case 'TEXT_MESSAGE_DELTA':
