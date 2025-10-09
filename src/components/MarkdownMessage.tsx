@@ -1,5 +1,6 @@
 import { Component, createSignal, createMemo, Show, For, onMount } from 'solid-js';
 import { parseMarkdown, extractCodeBlocks, getPlainText } from '../utils/markdown';
+import ToolCallDisplay from './ToolCallDisplay';
 import type { EnhancedAGUIMessage, MarkdownOptions } from '../services/types';
 
 interface MarkdownMessageProps {
@@ -225,6 +226,17 @@ const MarkdownMessage: Component<MarkdownMessageProps> = (props) => {
                   </div>
                 </Show>
               </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      {/* Tool Calls */}
+      <Show when={props.message.streamingToolCalls && props.message.streamingToolCalls.length > 0}>
+        <div class="mt-3 space-y-2">
+          <For each={props.message.streamingToolCalls}>
+            {(toolCall) => (
+              <ToolCallDisplay toolCall={toolCall} />
             )}
           </For>
         </div>

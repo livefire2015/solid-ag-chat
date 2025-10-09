@@ -2,11 +2,15 @@
 export const AG_UI_EVENT_TYPES = [
   'RUN_STARTED',
   'RUN_FINISHED',
+  'TEXT_MESSAGE_START',
   'TEXT_MESSAGE_CONTENT',
+  'TEXT_MESSAGE_END',
   'TEXT_MESSAGE_DELTA',
   'TOOL_CALL_START',
-  'TOOL_CALL_DELTA',
+  'TOOL_CALL_ARGS',
   'TOOL_CALL_END',
+  'TOOL_CALL_RESULT',
+  'TOOL_CALL_DELTA',
   'TOOL_OUTPUT',
   'STATE_SNAPSHOT',
   'STATE_DELTA',
@@ -35,12 +39,36 @@ export interface AGUIToolCall {
   result?: unknown;
 }
 
+// Enhanced Tool Call with streaming state
+export interface StreamingToolCall {
+  id: string;
+  name: string;
+  arguments: string; // Raw arguments as they stream in
+  parsedArguments?: Record<string, unknown>; // Parsed when complete
+  result?: string;
+  status: 'starting' | 'building_args' | 'executing' | 'completed' | 'error';
+  parentMessageId?: string;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
 // Event Interfaces
+export interface TextMessageStartEvent {
+  type: 'TEXT_MESSAGE_START';
+  messageId: string;
+  role: 'assistant' | 'user' | 'system';
+}
+
 export interface TextMessageContentEvent {
   type: 'TEXT_MESSAGE_CONTENT';
-  content: string;
-  role?: 'user' | 'assistant' | 'system';
-  timestamp?: string;
+  messageId: string;
+  delta: string;
+}
+
+export interface TextMessageEndEvent {
+  type: 'TEXT_MESSAGE_END';
+  messageId: string;
 }
 
 export interface TextMessageDeltaEvent {
@@ -48,20 +76,38 @@ export interface TextMessageDeltaEvent {
   delta: string;
 }
 
+// New Tool Call Events
 export interface ToolCallStartEvent {
   type: 'TOOL_CALL_START';
-  toolCall: AGUIToolCall;
+  toolCallId: string;
+  toolCallName: string;
+  parentMessageId?: string;
 }
 
-export interface ToolCallDeltaEvent {
-  type: 'TOOL_CALL_DELTA';
+export interface ToolCallArgsEvent {
+  type: 'TOOL_CALL_ARGS';
   toolCallId: string;
-  delta: Partial<AGUIToolCall>;
+  delta: string;
 }
 
 export interface ToolCallEndEvent {
   type: 'TOOL_CALL_END';
   toolCallId: string;
+}
+
+export interface ToolCallResultEvent {
+  type: 'TOOL_CALL_RESULT';
+  messageId: string;
+  toolCallId: string;
+  content: string;
+  role?: string;
+}
+
+// Legacy Tool Call Events (keeping for backward compatibility)
+export interface ToolCallDeltaEvent {
+  type: 'TOOL_CALL_DELTA';
+  toolCallId: string;
+  delta: Partial<AGUIToolCall>;
 }
 
 export interface ToolOutputEvent {
@@ -127,11 +173,15 @@ export interface ContextUpdateEvent {
 
 // Union type for all events
 export type AGUIEvent =
+  | TextMessageStartEvent
   | TextMessageContentEvent
+  | TextMessageEndEvent
   | TextMessageDeltaEvent
   | ToolCallStartEvent
-  | ToolCallDeltaEvent
+  | ToolCallArgsEvent
   | ToolCallEndEvent
+  | ToolCallResultEvent
+  | ToolCallDeltaEvent
   | ToolOutputEvent
   | RunStartedEvent
   | RunFinishedEvent
@@ -172,10 +222,17 @@ export interface StreamEvent {
 
 // Request Types
 export interface AGUIRequest {
+  threadId: string;
+  runId: string;
+  state: any;
   messages: Array<{
+    id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
   }>;
+  tools: Array<any>;
+  context: Array<any>;
+  forwardedProps: any;
 }
 
 // Tool Definition
@@ -210,6 +267,7 @@ export interface EnhancedAGUIMessage extends AGUIMessage {
   isEdited?: boolean;
   editedAt?: string;
   metadata?: Record<string, unknown>;
+  streamingToolCalls?: StreamingToolCall[];
 }
 
 export type MessageAction = 'copy' | 'edit' | 'delete' | 'retry' | 'react';

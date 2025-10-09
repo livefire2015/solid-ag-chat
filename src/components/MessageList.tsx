@@ -1,6 +1,7 @@
 import { Component, For, createEffect, createSignal, Show, onMount } from 'solid-js';
 import MarkdownMessage from './MarkdownMessage';
 import FilePreview from './FilePreview';
+import ToolCallDisplay from './ToolCallDisplay';
 import type { EnhancedAGUIMessage, MessageAction, MarkdownOptions } from '../services/types';
 
 interface MessageListProps {
@@ -176,7 +177,7 @@ const MessageList: Component<MessageListProps> = (props) => {
                               class={`rounded-lg px-4 py-3 ${
                                 message.role === 'user'
                                   ? 'bg-blue-500 text-white ml-12'
-                                  : 'bg-white border border-gray-200 text-gray-900 mr-12'
+                                  : 'bg-green-500 text-white mr-12'
                               }`}
                             >
                               {/* Message Header */}
@@ -264,6 +265,17 @@ const MessageList: Component<MessageListProps> = (props) => {
                                           </div>
                                         </button>
                                       </div>
+                                    )}
+                                  </For>
+                                </div>
+                              </Show>
+
+                              {/* Tool Calls */}
+                              <Show when={message.streamingToolCalls && message.streamingToolCalls.length > 0}>
+                                <div class="mt-3 space-y-2">
+                                  <For each={message.streamingToolCalls}>
+                                    {(toolCall) => (
+                                      <ToolCallDisplay toolCall={toolCall} />
                                     )}
                                   </For>
                                 </div>

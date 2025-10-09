@@ -7,6 +7,8 @@ export { default as ConversationList } from './components/ConversationList';
 export { default as FileAttachment } from './components/FileAttachment';
 export { default as FilePreview } from './components/FilePreview';
 export { default as MarkdownMessage } from './components/MarkdownMessage';
+export { default as ToolCallDisplay } from './components/ToolCallDisplay';
+export { default as ToolCallResult } from './components/ToolCallResult';
 export { default as ThemeProvider, ThemeToggle, useTheme, useThemeColors } from './components/ThemeProvider';
 
 // Services
