@@ -14,17 +14,26 @@ const StatePanel: Component<StatePanelProps> = (props) => {
       {/* Toggle Button */}
       <button
         onClick={() => setIsVisible(!isVisible())}
-        class="fixed right-4 top-4 z-50 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors"
+        class="fixed top-4 right-4 z-50 bg-indigo-600 text-white p-2 rounded-full shadow-lg hover:bg-indigo-700 transition-colors"
+        title={isVisible() ? 'Hide Agent State' : 'Show Agent State'}
       >
-        {isVisible() ? 'Hide' : 'Show'} Agent State
+        <Show when={isVisible()} fallback={
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        }>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </Show>
       </button>
 
       {/* Side Panel */}
       <Show when={isVisible()}>
-        <div class="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl border-l z-40 overflow-y-auto">
+        <div class="fixed right-0 top-0 h-full w-96 bg-white dark:bg-gray-800 shadow-2xl border-l border-gray-200 dark:border-gray-700 z-40 overflow-y-auto">
           <div class="p-4">
             <div class="flex items-center justify-between mb-4">
-              <h2 class="text-xl font-bold text-gray-900">Agent State</h2>
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white">Agent State</h2>
               <button
                 onClick={() => setIsVisible(false)}
                 class="text-gray-500 hover:text-gray-700"
