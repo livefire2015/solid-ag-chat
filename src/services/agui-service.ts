@@ -7,7 +7,9 @@ import type {
   AgentState,
   AGUIRequest,
   StreamingToolCall,
+  ApiConfig,
 } from './types';
+import { buildEndpointUrl } from './types/api';
 
 export interface ChatService {
   messages: () => EnhancedAGUIMessage[];
@@ -20,7 +22,11 @@ export interface ChatService {
   loadMessages: (messages: EnhancedAGUIMessage[]) => void;
 }
 
-export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/stream'): ChatService {
+export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatService {
+  // Support backward compatibility
+  const apiConfig: ApiConfig = typeof apiConfigOrUrl === 'string'
+    ? { baseUrl: apiConfigOrUrl || 'http://localhost:8000/agent/stream' }
+    : apiConfigOrUrl || { baseUrl: 'http://localhost:8000/agent/stream' };
   const [messages, setMessages] = createSignal<EnhancedAGUIMessage[]>([], { equals: false });
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -30,7 +36,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
   // Track active tool calls
   const [activeToolCalls, setActiveToolCalls] = createSignal<Map<string, StreamingToolCall>>(new Map());
 
-  const sendMessage = async (message: string, attachments?: File[]) => {
+  const sendMessage = async (message: string, attachments?: File[], conversationId?: string) => {
     if (!message.trim()) return;
 
     setIsLoading(true);
@@ -39,7 +45,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
     // Add user message immediately
     const userMessage: EnhancedAGUIMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      conversationId: 'default', // For now, using default conversation
+      conversationId: conversationId || 'default',
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
@@ -68,10 +74,17 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
         forwardedProps: null,
       };
 
-      const response = await fetch(apiUrl, {
+      // Build the streaming endpoint URL
+      const streamEndpoint = apiConfig.endpoints?.streamMessage || '/agent/stream';
+      const streamUrl = conversationId && streamEndpoint.includes('{conversationId}')
+        ? buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint, { conversationId })
+        : buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint);
+
+      const response = await fetch(streamUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(apiConfig.headers || {})
         },
         body: JSON.stringify(request),
       });
@@ -110,7 +123,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                 if (!assistantMessageStarted) {
                   const assistantMsg: EnhancedAGUIMessage = {
                     id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    conversationId: 'default',
+                    conversationId: conversationId || 'default',
                     role: 'assistant',
                     content: '',
                     timestamp: new Date().toISOString(),
@@ -158,7 +171,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                   } else {
                     updated.push({
                       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                      conversationId: 'default',
+                      conversationId: conversationId || 'default',
                       role: 'assistant',
                       content: currentAssistantMessage,
                       timestamp: new Date().toISOString(),
@@ -233,7 +246,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                     // Create new assistant message for tool calls
                     updated.push({
                       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                      conversationId: 'default',
+                      conversationId: conversationId || 'default',
                       role: 'assistant',
                       content: '',
                       timestamp: new Date().toISOString(),
