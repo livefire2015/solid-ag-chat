@@ -16,7 +16,7 @@ export interface ChatService {
   isLoading: () => boolean;
   error: () => string | null;
   agentState: () => AgentState | null;
-  sendMessage: (message: string, attachments?: File[]) => Promise<void>;
+  sendMessage: (message: string, attachments?: File[], conversationId?: string) => Promise<void>;
   clearMessages: () => void;
   clearAgentState: () => void;
   loadMessages: (messages: EnhancedAGUIMessage[]) => void;
