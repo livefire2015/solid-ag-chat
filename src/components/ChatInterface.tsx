@@ -1,7 +1,8 @@
 import { Component, Show, createSignal, onMount } from 'solid-js';
 import { createAGUIService } from '../services/agui-service';
 import { createConversationStore } from '../stores/conversation-store';
-import { StorageManager, createLocalStorageAdapter } from '../services/storage';
+import { StorageManager, createLocalStorageAdapter, createRemoteStorageAdapter } from '../services/storage';
+import type { ApiConfig, StorageMode } from '../services/types';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import StatePanel from './StatePanel';
@@ -9,14 +10,40 @@ import ConversationList from './ConversationList';
 import ThemeProvider, { ThemeToggle } from './ThemeProvider';
 
 interface ChatInterfaceProps {
-  apiUrl?: string;
+  apiUrl?: string;  // Backward compatibility
+  apiConfig?: ApiConfig;
+  storageMode?: StorageMode;
   title?: string;
   description?: string;
 }
 
 const ChatInterface: Component<ChatInterfaceProps> = (props) => {
-  const chatService = createAGUIService(props.apiUrl);
-  const storageManager = new StorageManager(createLocalStorageAdapter());
+  // Create API config from props (backward compatibility)
+  const apiConfig: ApiConfig = props.apiConfig || {
+    baseUrl: props.apiUrl || 'http://localhost:8000',
+    endpoints: {
+      streamMessage: '/agent/stream'
+    }
+  };
+
+  // Create storage adapter based on mode
+  const createStorageAdapter = () => {
+    const mode = props.storageMode || 'local';
+    switch (mode) {
+      case 'remote':
+        return createRemoteStorageAdapter(apiConfig);
+      case 'hybrid':
+        // For now, hybrid mode falls back to local
+        console.warn('Hybrid storage mode not yet implemented, using local storage');
+        return createLocalStorageAdapter();
+      case 'local':
+      default:
+        return createLocalStorageAdapter();
+    }
+  };
+
+  const chatService = createAGUIService(apiConfig);
+  const storageManager = new StorageManager(createStorageAdapter());
   const conversationStore = createConversationStore(storageManager);
   const [showConversations, setShowConversations] = createSignal(false);
 
