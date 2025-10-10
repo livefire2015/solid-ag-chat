@@ -405,3 +405,6 @@ export interface UIState {
   loading: boolean;
   error: string | null;
 }
+
+// Export API types
+export * from './types/api';
