@@ -10,9 +10,11 @@ import ConversationList from './ConversationList';
 import ThemeProvider, { ThemeToggle } from './ThemeProvider';
 
 interface ChatInterfaceProps {
-  apiUrl?: string;  // Backward compatibility
+  /** @deprecated Use apiConfig instead */
+  apiUrl?: string;
   apiConfig?: ApiConfig;
   storageMode?: StorageMode;
+  conversationId?: string;
   title?: string;
   description?: string;
 }
@@ -47,10 +49,34 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   const conversationStore = createConversationStore(storageManager);
   const [showConversations, setShowConversations] = createSignal(false);
 
-  // Initialize with a default conversation
+  // Initialize conversation based on conversationId prop
   onMount(async () => {
-    if (conversationStore.conversations().length === 0) {
-      await conversationStore.createConversation('Welcome Chat');
+    if (props.conversationId) {
+      // Load specific conversation from URL
+      await conversationStore.loadConversation(props.conversationId);
+      const conversation = conversationStore.currentConversation();
+      if (conversation) {
+        chatService.loadMessages(conversation.messages);
+      } else {
+        // Conversation ID in URL doesn't exist, create a new one with that ID
+        console.warn(`Conversation ${props.conversationId} not found, creating new conversation`);
+        await conversationStore.createConversation('New Chat', props.conversationId);
+        await conversationStore.loadConversation(props.conversationId);
+      }
+    } else {
+      // No conversationId provided - create default conversation if none exist
+      if (conversationStore.conversations().length === 0) {
+        const newConversationId = await conversationStore.createConversation('Welcome Chat');
+        await conversationStore.loadConversation(newConversationId);
+      } else {
+        // Load the most recent conversation
+        const conversations = conversationStore.conversations();
+        await conversationStore.loadConversation(conversations[0].id);
+        const conversation = conversationStore.currentConversation();
+        if (conversation) {
+          chatService.loadMessages(conversation.messages);
+        }
+      }
     }
   });
 
@@ -71,8 +97,11 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   };
 
   const handleSendMessage = async (content: string, files?: any[]) => {
-    await chatService.sendMessage(content, files);
     const currentConv = conversationStore.currentConversation();
+    const conversationId = currentConv?.id || props.conversationId;
+
+    await chatService.sendMessage(content, files, conversationId);
+
     if (currentConv) {
       await conversationStore.updateConversation(currentConv.id, {
         messages: chatService.messages()
