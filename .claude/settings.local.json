@@ -4,7 +4,9 @@
       "Bash(git checkout:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_click"
     ],
     "deny": [],
     "ask": []

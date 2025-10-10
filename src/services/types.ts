@@ -135,7 +135,7 @@ export interface StateSnapshotEvent {
 
 export interface StateDeltaEvent {
   type: 'STATE_DELTA';
-  delta: Partial<AgentState>;
+  delta: Array<import('fast-json-patch').Operation>; // JSON Patch operations
 }
 
 export interface ErrorEvent {
@@ -196,6 +196,8 @@ export type AGUIEvent =
 
 // Agent State Types
 export interface AgentState {
+  [key: string]: any; // Support arbitrary state structure
+  // Common fields that might be used:
   currentThought?: string;
   workingMemory?: Record<string, unknown>;
   reasoningChain?: string[];
@@ -403,3 +405,6 @@ export interface UIState {
   loading: boolean;
   error: string | null;
 }
+
+// Export API types
+export * from './types/api';

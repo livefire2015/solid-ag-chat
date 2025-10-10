@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js';
+import * as jsonpatch from 'fast-json-patch';
 import type {
   AGUIMessage,
   EnhancedAGUIMessage,
@@ -6,20 +7,26 @@ import type {
   AgentState,
   AGUIRequest,
   StreamingToolCall,
+  ApiConfig,
 } from './types';
+import { buildEndpointUrl } from './types/api';
 
 export interface ChatService {
   messages: () => EnhancedAGUIMessage[];
   isLoading: () => boolean;
   error: () => string | null;
   agentState: () => AgentState | null;
-  sendMessage: (message: string, attachments?: File[]) => Promise<void>;
+  sendMessage: (message: string, attachments?: File[], conversationId?: string) => Promise<void>;
   clearMessages: () => void;
   clearAgentState: () => void;
   loadMessages: (messages: EnhancedAGUIMessage[]) => void;
 }
 
-export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/stream'): ChatService {
+export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatService {
+  // Support backward compatibility
+  const apiConfig: ApiConfig = typeof apiConfigOrUrl === 'string'
+    ? { baseUrl: apiConfigOrUrl || 'http://localhost:8000/agent/stream' }
+    : apiConfigOrUrl || { baseUrl: 'http://localhost:8000/agent/stream' };
   const [messages, setMessages] = createSignal<EnhancedAGUIMessage[]>([], { equals: false });
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -29,7 +36,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
   // Track active tool calls
   const [activeToolCalls, setActiveToolCalls] = createSignal<Map<string, StreamingToolCall>>(new Map());
 
-  const sendMessage = async (message: string, attachments?: File[]) => {
+  const sendMessage = async (message: string, attachments?: File[], conversationId?: string) => {
     if (!message.trim()) return;
 
     setIsLoading(true);
@@ -38,7 +45,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
     // Add user message immediately
     const userMessage: EnhancedAGUIMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      conversationId: 'default', // For now, using default conversation
+      conversationId: conversationId || 'default',
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
@@ -67,10 +74,17 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
         forwardedProps: null,
       };
 
-      const response = await fetch(apiUrl, {
+      // Build the streaming endpoint URL
+      const streamEndpoint = apiConfig.endpoints?.streamMessage || '/agent/stream';
+      const streamUrl = conversationId && streamEndpoint.includes('{conversationId}')
+        ? buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint, { conversationId })
+        : buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint);
+
+      const response = await fetch(streamUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(apiConfig.headers || {})
         },
         body: JSON.stringify(request),
       });
@@ -109,7 +123,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                 if (!assistantMessageStarted) {
                   const assistantMsg: EnhancedAGUIMessage = {
                     id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    conversationId: 'default',
+                    conversationId: conversationId || 'default',
                     role: 'assistant',
                     content: '',
                     timestamp: new Date().toISOString(),
@@ -157,7 +171,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                   } else {
                     updated.push({
                       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                      conversationId: 'default',
+                      conversationId: conversationId || 'default',
                       role: 'assistant',
                       content: currentAssistantMessage,
                       timestamp: new Date().toISOString(),
@@ -171,14 +185,30 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                 break;
 
               case 'STATE_SNAPSHOT':
+                // Replace entire state with snapshot
                 setAgentState(event.state);
+                console.log('State snapshot received:', event.state);
                 break;
 
               case 'STATE_DELTA':
-                setAgentState((prev) => ({
-                  ...prev,
-                  ...event.delta,
-                }));
+                // Apply JSON Patch operations to current state
+                setAgentState((prev) => {
+                  if (!prev) {
+                    console.warn('Received STATE_DELTA but no current state exists');
+                    return prev;
+                  }
+                  try {
+                    // Clone the current state to avoid mutations
+                    const stateCopy = JSON.parse(JSON.stringify(prev));
+                    // Apply the JSON Patch operations
+                    const result = jsonpatch.applyPatch(stateCopy, event.delta);
+                    console.log('Applied state delta:', event.delta, 'Result:', result.newDocument);
+                    return result.newDocument;
+                  } catch (error) {
+                    console.error('Error applying state delta:', error);
+                    return prev;
+                  }
+                });
                 break;
 
               case 'ERROR':
@@ -216,7 +246,7 @@ export function createAGUIService(apiUrl: string = 'http://localhost:8000/agent/
                     // Create new assistant message for tool calls
                     updated.push({
                       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                      conversationId: 'default',
+                      conversationId: conversationId || 'default',
                       role: 'assistant',
                       content: '',
                       timestamp: new Date().toISOString(),

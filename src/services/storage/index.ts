@@ -1,14 +1,16 @@
 import type { StorageAdapter, ConversationSummary, Conversation } from '../types';
 import { LocalStorageAdapter, createLocalStorageAdapter } from './localStorage';
 import { IndexedDBAdapter, createIndexedDBAdapter } from './indexedDB';
+import { RemoteStorageAdapter, createRemoteStorageAdapter } from './remoteStorage';
 
-export type StorageType = 'localStorage' | 'indexedDB' | 'memory';
+export type StorageType = 'localStorage' | 'indexedDB' | 'memory' | 'remote';
 
 export interface StorageOptions {
   type: StorageType;
   prefix?: string;
   dbName?: string;
   dbVersion?: number;
+  apiConfig?: import('../types').ApiConfig;
 }
 
 // Memory storage adapter for testing or when persistence isn't needed
@@ -46,6 +48,12 @@ export function createStorageAdapter(options: StorageOptions): StorageAdapter {
 
     case 'memory':
       return new MemoryStorageAdapter();
+
+    case 'remote':
+      if (!options.apiConfig) {
+        throw new Error('API configuration required for remote storage');
+      }
+      return createRemoteStorageAdapter(options.apiConfig);
 
     default:
       throw new Error(`Unsupported storage type: ${options.type}`);
@@ -201,3 +209,4 @@ export class StorageManager {
 
 export * from './localStorage';
 export * from './indexedDB';
+export * from './remoteStorage';

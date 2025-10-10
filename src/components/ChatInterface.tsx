@@ -1,7 +1,8 @@
 import { Component, Show, createSignal, onMount } from 'solid-js';
 import { createAGUIService } from '../services/agui-service';
 import { createConversationStore } from '../stores/conversation-store';
-import { StorageManager, createLocalStorageAdapter } from '../services/storage';
+import { StorageManager, createLocalStorageAdapter, createRemoteStorageAdapter } from '../services/storage';
+import type { ApiConfig, StorageMode } from '../services/types';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import StatePanel from './StatePanel';
@@ -9,21 +10,73 @@ import ConversationList from './ConversationList';
 import ThemeProvider, { ThemeToggle } from './ThemeProvider';
 
 interface ChatInterfaceProps {
+  /** @deprecated Use apiConfig instead */
   apiUrl?: string;
+  apiConfig?: ApiConfig;
+  storageMode?: StorageMode;
+  conversationId?: string;
   title?: string;
   description?: string;
 }
 
 const ChatInterface: Component<ChatInterfaceProps> = (props) => {
-  const chatService = createAGUIService(props.apiUrl);
-  const storageManager = new StorageManager(createLocalStorageAdapter());
+  // Create API config from props (backward compatibility)
+  const apiConfig: ApiConfig = props.apiConfig || {
+    baseUrl: props.apiUrl || 'http://localhost:8000',
+    endpoints: {
+      streamMessage: '/agent/stream'
+    }
+  };
+
+  // Create storage adapter based on mode
+  const createStorageAdapter = () => {
+    const mode = props.storageMode || 'local';
+    switch (mode) {
+      case 'remote':
+        return createRemoteStorageAdapter(apiConfig);
+      case 'hybrid':
+        // For now, hybrid mode falls back to local
+        console.warn('Hybrid storage mode not yet implemented, using local storage');
+        return createLocalStorageAdapter();
+      case 'local':
+      default:
+        return createLocalStorageAdapter();
+    }
+  };
+
+  const chatService = createAGUIService(apiConfig);
+  const storageManager = new StorageManager(createStorageAdapter());
   const conversationStore = createConversationStore(storageManager);
   const [showConversations, setShowConversations] = createSignal(false);
 
-  // Initialize with a default conversation
+  // Initialize conversation based on conversationId prop
   onMount(async () => {
-    if (conversationStore.conversations().length === 0) {
-      await conversationStore.createConversation('Welcome Chat');
+    if (props.conversationId) {
+      // Load specific conversation from URL
+      await conversationStore.loadConversation(props.conversationId);
+      const conversation = conversationStore.currentConversation();
+      if (conversation) {
+        chatService.loadMessages(conversation.messages);
+      } else {
+        // Conversation ID in URL doesn't exist, create a new one with that ID
+        console.warn(`Conversation ${props.conversationId} not found, creating new conversation`);
+        await conversationStore.createConversation('New Chat', props.conversationId);
+        await conversationStore.loadConversation(props.conversationId);
+      }
+    } else {
+      // No conversationId provided - create default conversation if none exist
+      if (conversationStore.conversations().length === 0) {
+        const newConversationId = await conversationStore.createConversation('Welcome Chat');
+        await conversationStore.loadConversation(newConversationId);
+      } else {
+        // Load the most recent conversation
+        const conversations = conversationStore.conversations();
+        await conversationStore.loadConversation(conversations[0].id);
+        const conversation = conversationStore.currentConversation();
+        if (conversation) {
+          chatService.loadMessages(conversation.messages);
+        }
+      }
     }
   });
 
@@ -44,8 +97,11 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   };
 
   const handleSendMessage = async (content: string, files?: any[]) => {
-    await chatService.sendMessage(content, files);
     const currentConv = conversationStore.currentConversation();
+    const conversationId = currentConv?.id || props.conversationId;
+
+    await chatService.sendMessage(content, files, conversationId);
+
     if (currentConv) {
       await conversationStore.updateConversation(currentConv.id, {
         messages: chatService.messages()
@@ -97,14 +153,6 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
                   <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{props.title || "Nova Chat"}</h1>
                   <p class="text-sm text-gray-500 dark:text-gray-400">{props.description || "Let language become the interface"}</p>
                 </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  onClick={handleNewConversation}
-                  class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  New Chat
-                </button>
               </div>
             </div>
           </div>
