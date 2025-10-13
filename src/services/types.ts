@@ -228,8 +228,10 @@ export interface AGUIRequest {
   runId: string;
   state: any;
   messages: Array<{
-    id: string;
     role: 'user' | 'assistant' | 'system';
+    user: {
+      id: string; // AG-UI protocol expects id nested under user
+    };
     content: string;
   }>;
   tools: Array<any>;

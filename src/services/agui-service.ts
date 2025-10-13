@@ -65,8 +65,10 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
         runId: crypto.randomUUID(), // New run ID for each message
         state: null,
         messages: allMessages.map(msg => ({
-          id: crypto.randomUUID(), // Generate unique ID for each message
           role: msg.role,
+          user: {
+            id: crypto.randomUUID() // AG-UI protocol expects id nested under user
+          },
           content: msg.content,
         })),
         tools: [],
