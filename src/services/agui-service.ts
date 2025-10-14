@@ -20,6 +20,7 @@ export interface ChatService {
   clearMessages: () => void;
   clearAgentState: () => void;
   loadMessages: (messages: EnhancedAGUIMessage[]) => void;
+  setAutoTitleCallback: (callback: ((conversationId: string) => Promise<void>) | null) => void;
 }
 
 export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatService {
@@ -35,6 +36,8 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
   const [threadId] = createSignal(crypto.randomUUID());
   // Track active tool calls
   const [activeToolCalls, setActiveToolCalls] = createSignal<Map<string, StreamingToolCall>>(new Map());
+  // Auto-title generation callback
+  let autoTitleCallback: ((conversationId: string) => Promise<void>) | null = null;
 
   const sendMessage = async (message: string, attachments?: File[], conversationId?: string) => {
     if (!message.trim()) return;
@@ -154,6 +157,15 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
               case 'TEXT_MESSAGE_END':
                 // Message is complete
                 console.log('Message ended:', currentAssistantMessage);
+
+                // Trigger auto-title generation if callback is set
+                if (autoTitleCallback && conversationId) {
+                  try {
+                    await autoTitleCallback(conversationId);
+                  } catch (error) {
+                    console.error('Auto-title generation failed:', error);
+                  }
+                }
                 break;
 
               case 'TEXT_MESSAGE_DELTA':
@@ -436,6 +448,10 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
     setError(null);
   };
 
+  const setAutoTitleCallback = (callback: ((conversationId: string) => Promise<void>) | null) => {
+    autoTitleCallback = callback;
+  };
+
   return {
     messages,
     isLoading,
@@ -445,5 +461,6 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
     clearMessages,
     clearAgentState,
     loadMessages,
+    setAutoTitleCallback,
   };
 }
