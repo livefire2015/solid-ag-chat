@@ -15,6 +15,9 @@ interface ChatInterfaceProps {
   apiConfig?: ApiConfig;
   storageMode?: StorageMode;
   conversationId?: string;
+  autoGenerateTitle?: boolean;
+  createConversationOnFirstMessage?: boolean;
+  newChatMode?: boolean;
   title?: string;
   description?: string;
 }
@@ -49,8 +52,41 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   const conversationStore = createConversationStore(storageManager);
   const [showConversations, setShowConversations] = createSignal(false);
 
-  // Initialize conversation based on conversationId prop
+  // Auto-title generation callback
+  const handleAutoTitleGeneration = async (conversationId: string) => {
+    if (!props.autoGenerateTitle) return;
+
+    const conversation = conversationStore.currentConversation();
+    if (!conversation) return;
+
+    // Only generate title for conversations with generic titles
+    const genericTitles = ['New Chat', 'Welcome Chat', 'Chat', 'Conversation'];
+    const isGenericTitle = genericTitles.some(generic =>
+      conversation.title.includes(generic) || conversation.title.match(/^Chat \d+$/)
+    );
+
+    if (isGenericTitle && props.storageMode === 'remote') {
+      try {
+        const storageAdapter = createStorageAdapter();
+        if ('generateTitle' in storageAdapter) {
+          const newTitle = await (storageAdapter as any).generateTitle(conversationId);
+          if (newTitle) {
+            await conversationStore.updateConversation(conversationId, { title: newTitle });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to generate title:', error);
+      }
+    }
+  };
+
+  // Initialize conversation based on conversationId prop and mode
   onMount(async () => {
+    // Set up auto-title callback if enabled
+    if (props.autoGenerateTitle !== false) {
+      chatService.setAutoTitleCallback(handleAutoTitleGeneration);
+    }
+
     if (props.conversationId) {
       // Load specific conversation from URL
       await conversationStore.loadConversation(props.conversationId);
@@ -63,8 +99,11 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
         await conversationStore.createConversation('New Chat', props.conversationId);
         await conversationStore.loadConversation(props.conversationId);
       }
+    } else if (props.newChatMode || props.createConversationOnFirstMessage) {
+      // New chat mode - don't create conversation yet, wait for first message
+      console.log('New chat mode - conversation will be created on first message');
     } else {
-      // No conversationId provided - create default conversation if none exist
+      // Traditional mode - create default conversation if none exist
       if (conversationStore.conversations().length === 0) {
         const newConversationId = await conversationStore.createConversation('Welcome Chat');
         await conversationStore.loadConversation(newConversationId);
@@ -97,11 +136,49 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   };
 
   const handleSendMessage = async (content: string, files?: any[]) => {
-    const currentConv = conversationStore.currentConversation();
-    const conversationId = currentConv?.id || props.conversationId;
+    let currentConv = conversationStore.currentConversation();
+    let conversationId = currentConv?.id || props.conversationId;
 
+    // Lazy conversation creation for new chat mode
+    if (!currentConv && (props.newChatMode || props.createConversationOnFirstMessage)) {
+      try {
+        if (props.storageMode === 'remote') {
+          // Use createConversationWithMessage for remote storage
+          const storageAdapter = createStorageAdapter();
+          if ('createConversationWithMessage' in storageAdapter) {
+            conversationId = await (storageAdapter as any).createConversationWithMessage(
+              'New Chat',
+              content,
+              files
+            );
+          } else {
+            // Fallback to regular creation
+            conversationId = await conversationStore.createConversation('New Chat');
+          }
+        } else {
+          // For local storage, create conversation normally
+          conversationId = await conversationStore.createConversation('New Chat');
+        }
+
+        if (conversationId) {
+          await conversationStore.loadConversation(conversationId);
+          currentConv = conversationStore.currentConversation();
+        }
+      } catch (error) {
+        console.error('Failed to create conversation:', error);
+        return;
+      }
+    }
+
+    if (!conversationId) {
+      console.error('No conversation ID available for sending message');
+      return;
+    }
+
+    // Send the message
     await chatService.sendMessage(content, files, conversationId);
 
+    // Update conversation with new messages
     if (currentConv) {
       await conversationStore.updateConversation(currentConv.id, {
         messages: chatService.messages()
