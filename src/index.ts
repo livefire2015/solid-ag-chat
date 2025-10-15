@@ -1,7 +1,7 @@
 // Components
 export { default as ChatInterface } from './components/ChatInterface';
 export { default as MessageList } from './components/MessageList';
-export { default as MessageInput } from './components/MessageInput';
+export { default as MessageInput, type MessageInputHandle } from './components/MessageInput';
 export { default as StatePanel } from './components/StatePanel';
 export { default as ConversationList } from './components/ConversationList';
 export { default as FileAttachment } from './components/FileAttachment';
@@ -10,6 +10,8 @@ export { default as MarkdownMessage } from './components/MarkdownMessage';
 export { default as ToolCallDisplay } from './components/ToolCallDisplay';
 export { default as ToolCallResult } from './components/ToolCallResult';
 export { default as ThemeProvider, ThemeToggle, useTheme, useThemeColors } from './components/ThemeProvider';
+export { default as EmptyState } from './components/EmptyState';
+export { default as SuggestionCard } from './components/SuggestionCard';
 
 // Services
 export { createAGUIService } from './services/agui-service';

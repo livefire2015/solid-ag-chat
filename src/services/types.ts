@@ -394,6 +394,15 @@ export interface Plugin {
   onConversationCreated?: (conversation: Conversation) => void;
 }
 
+// Suggestion Types
+export interface SuggestionItem {
+  id: string;
+  icon?: string;
+  category: string;
+  title: string;
+  description: string;
+}
+
 // UI State Types
 export interface UIState {
   sidebarOpen: boolean;

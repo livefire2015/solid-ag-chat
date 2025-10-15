@@ -41,6 +41,7 @@
   "devDependencies": {
     "@babel/core": "^7.28.4",
     "@tailwindcss/cli": "^4.1.14",
+    "@types/fast-json-patch": "^1.0.4",
     "autoprefixer": "^10.4.21",
     "babel-preset-solid": "^1.9.9",
     "postcss": "^8.5.6",

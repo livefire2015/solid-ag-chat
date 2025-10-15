@@ -18,6 +18,7 @@ interface MessageListProps {
   onTyping?: (isTyping: boolean) => void;
   searchQuery?: string;
   className?: string;
+  emptyStateComponent?: any; // JSX element to show when no messages
 }
 
 const MessageList: Component<MessageListProps> = (props) => {
@@ -140,15 +141,22 @@ const MessageList: Component<MessageListProps> = (props) => {
 
   return (
     <div class={`relative flex-1 flex flex-col ${props.className || ''}`}>
-      {/* Messages Container */}
+      {/* Empty State or Messages Container */}
       <div
         class="flex-1 overflow-y-auto p-4"
         onScroll={handleScroll}
       >
-        <div class="space-y-4">
-          <For each={groupedMessages()}>
-            {(group) => (
-              <div class="space-y-4">
+        {/* Show Empty State when no messages and not loading */}
+        <Show when={props.messages.length === 0 && !props.isLoading && props.emptyStateComponent}>
+          {props.emptyStateComponent}
+        </Show>
+
+        {/* Show Messages */}
+        <Show when={props.messages.length > 0}>
+          <div class="space-y-4">
+            <For each={groupedMessages()}>
+              {(group) => (
+                <div class="space-y-4">
                 {/* Date Separator */}
                 <Show when={group.date}>
                   <div class="flex items-center justify-center">
@@ -298,13 +306,15 @@ const MessageList: Component<MessageListProps> = (props) => {
                       </div>
                     </div>
                   )}
-                </For>
-              </div>
-            )}
-          </For>
+                  </For>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
 
-          {/* Loading Indicator */}
-          <Show when={props.isLoading}>
+        {/* Loading Indicator */}
+        <Show when={props.isLoading}>
             <div class="flex justify-start">
               <div class="bg-white border border-gray-200 rounded-lg px-4 py-3 max-w-xs mr-12">
                 <div class="flex items-center gap-2">
@@ -328,9 +338,8 @@ const MessageList: Component<MessageListProps> = (props) => {
             </div>
           </Show>
 
-          {/* Scroll anchor */}
-          <div ref={setMessagesEndRef} class="h-1" />
-        </div>
+        {/* Scroll anchor */}
+        <div ref={setMessagesEndRef} class="h-1" />
       </div>
 
       {/* Scroll to Bottom Button */}

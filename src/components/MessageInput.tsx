@@ -2,6 +2,12 @@ import { Component, createSignal, Show, onMount } from 'solid-js';
 import FileAttachment from './FileAttachment';
 import type { FileAttachment as FileAttachmentType } from '../services/types';
 
+export interface MessageInputHandle {
+  setInputValue: (text: string) => void;
+  focus: () => void;
+  clear: () => void;
+}
+
 interface MessageInputProps {
   onSendMessage: (message: string, files?: FileAttachmentType[]) => void;
   disabled: boolean;
@@ -13,6 +19,7 @@ interface MessageInputProps {
   allowedFileTypes?: string[];
   autoSave?: boolean;
   onTyping?: (isTyping: boolean) => void;
+  ref?: (handle: MessageInputHandle) => void;
 }
 
 const MessageInput: Component<MessageInputProps> = (props) => {
@@ -25,6 +32,30 @@ const MessageInput: Component<MessageInputProps> = (props) => {
   const [isTyping, setIsTyping] = createSignal(false);
   let textareaRef: HTMLTextAreaElement | undefined;
   let typingTimer: number | undefined;
+
+  // Public methods for parent component access
+  const setInputValue = (text: string) => {
+    setMessage(text);
+    setTimeout(() => {
+      autoResize();
+      if (textareaRef) {
+        textareaRef.focus();
+      }
+    }, 0);
+  };
+
+  const focusInput = () => {
+    if (textareaRef) {
+      textareaRef.focus();
+    }
+  };
+
+  const clearInput = () => {
+    setMessage('');
+    setFiles([]);
+    clearDraft();
+    setTimeout(autoResize, 0);
+  };
 
   const placeholder = () =>
     props.placeholder ||
@@ -284,9 +315,18 @@ const MessageInput: Component<MessageInputProps> = (props) => {
     }, 0);
   };
 
-  // Load draft on mount
+  // Load draft on mount and expose handle to parent
   onMount(() => {
     loadDraft();
+
+    // Expose methods to parent component
+    if (props.ref) {
+      props.ref({
+        setInputValue,
+        focus: focusInput,
+        clear: clearInput
+      });
+    }
   });
 
   return (
@@ -373,7 +413,25 @@ const MessageInput: Component<MessageInputProps> = (props) => {
         </Show>
 
         <form onSubmit={handleSubmit} class="flex flex-col space-y-2">
-          <div class="flex space-x-2">
+          <div class="flex items-center space-x-3 px-2">
+            {/* File Attachment Button - Inline Left */}
+            <Show when={props.enableFileAttachments}>
+              <button
+                type="button"
+                onClick={() => setShowFileAttachment(!showFileAttachment())}
+                class={`p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 ${
+                  showFileAttachment() ? 'text-teal-600' : 'text-gray-500'
+                }`}
+                title="Attach files"
+                disabled={props.disabled}
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+            </Show>
+
+            {/* Input Field - Center */}
             <div class="flex-1 relative">
               <textarea
                 ref={textareaRef}
@@ -382,70 +440,31 @@ const MessageInput: Component<MessageInputProps> = (props) => {
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 placeholder={placeholder()}
-                class="w-full resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[2.5rem] max-h-[200px]"
+                class="w-full resize-none border-0 rounded-lg px-3 py-3 focus:outline-none focus:ring-0 min-h-[2.5rem] max-h-[200px] bg-transparent"
                 rows="1"
                 disabled={props.disabled}
                 style="overflow-y: auto; field-sizing: content;"
               />
-
-              {/* Character/Word Count */}
-              <Show when={message().length > 0}>
-                <div class="absolute bottom-1 right-2 text-xs text-gray-500 bg-white px-1">
-                  {message().length}
-                </div>
-              </Show>
             </div>
 
-            {/* Action Buttons */}
-            <div class="flex flex-col space-y-1">
-              {/* File Attachment Button */}
-              <Show when={props.enableFileAttachments}>
-                <button
-                  type="button"
-                  onClick={() => setShowFileAttachment(!showFileAttachment())}
-                  class={`p-2 rounded-lg hover:bg-gray-100 transition-colors ${
-                    showFileAttachment() ? 'text-blue-600 bg-blue-50' : 'text-gray-600'
-                  }`}
-                  title="Attach files"
-                  disabled={props.disabled}
-                >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                  </svg>
-                </button>
+            {/* Send Button - Circular Teal with Up Arrow */}
+            <button
+              type="submit"
+              disabled={props.disabled || (!message().trim() && files().filter(f => f.uploaded).length === 0)}
+              class="flex-shrink-0 w-10 h-10 bg-teal-500 text-white rounded-full hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              title="Send message"
+            >
+              <Show when={props.disabled} fallback={
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              }>
+                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
               </Show>
-
-              {/* Markdown Toggle */}
-              <Show when={props.enableMarkdown}>
-                <button
-                  type="button"
-                  onClick={() => setIsMarkdownMode(!isMarkdownMode())}
-                  class={`p-2 rounded-lg hover:bg-gray-100 transition-colors ${
-                    isMarkdownMode() ? 'text-blue-600 bg-blue-50' : 'text-gray-600'
-                  }`}
-                  title="Toggle Markdown mode"
-                  disabled={props.disabled}
-                >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </button>
-              </Show>
-
-              {/* Send Button */}
-              <button
-                type="submit"
-                disabled={props.disabled || (!message().trim() && files().filter(f => f.uploaded).length === 0)}
-                class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <Show when={props.disabled} fallback="Send">
-                  <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                </Show>
-              </button>
-            </div>
+            </button>
           </div>
 
           {/* File count indicator */}
