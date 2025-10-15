@@ -29,12 +29,16 @@ interface ChatInterfaceProps {
 
 const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   // Create API config from props (backward compatibility)
-  const apiConfig: ApiConfig = props.apiConfig || {
-    baseUrl: props.apiUrl || 'http://localhost:8000',
+  const apiConfig: ApiConfig = props.apiConfig || (props.apiUrl ? {
+    endpoints: {
+      streamMessage: props.apiUrl
+    }
+  } : {
+    baseUrl: 'http://localhost:8000',
     endpoints: {
       streamMessage: '/agent/stream'
     }
-  };
+  });
 
   // Create storage adapter based on mode
   const createStorageAdapter = () => {
