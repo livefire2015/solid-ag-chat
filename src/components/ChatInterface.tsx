@@ -4,10 +4,11 @@ import { createConversationStore } from '../stores/conversation-store';
 import { StorageManager, createLocalStorageAdapter, createRemoteStorageAdapter } from '../services/storage';
 import type { ApiConfig, StorageMode } from '../services/types';
 import MessageList from './MessageList';
-import MessageInput from './MessageInput';
+import MessageInput, { type MessageInputHandle } from './MessageInput';
 import StatePanel from './StatePanel';
 import ConversationList from './ConversationList';
 import ThemeProvider, { ThemeToggle } from './ThemeProvider';
+import EmptyState from './EmptyState';
 
 interface ChatInterfaceProps {
   /** @deprecated Use apiConfig instead */
@@ -20,6 +21,10 @@ interface ChatInterfaceProps {
   newChatMode?: boolean;
   title?: string;
   description?: string;
+  userName?: string;
+  suggestions?: import('../services/types').SuggestionItem[];
+  showEmptyState?: boolean;
+  disclaimerText?: string;
 }
 
 const ChatInterface: Component<ChatInterfaceProps> = (props) => {
@@ -51,6 +56,16 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   const storageManager = new StorageManager(createStorageAdapter());
   const conversationStore = createConversationStore(storageManager);
   const [showConversations, setShowConversations] = createSignal(false);
+
+  // Reference to MessageInput for programmatic control
+  let messageInputHandle: MessageInputHandle | undefined;
+
+  // Handle suggestion card clicks
+  const handleSuggestionClick = (suggestion: import('../services/types').SuggestionItem) => {
+    if (messageInputHandle) {
+      messageInputHandle.setInputValue(suggestion.title);
+    }
+  };
 
   // Auto-title generation callback
   const handleAutoTitleGeneration = async (conversationId: string) => {
@@ -263,6 +278,15 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
             messages={chatService.messages()}
             isLoading={chatService.isLoading()}
             enableMarkdown={true}
+            emptyStateComponent={
+              (props.showEmptyState !== false && (props.userName || props.suggestions)) ? (
+                <EmptyState
+                  userName={props.userName}
+                  suggestions={props.suggestions}
+                  onSuggestionClick={handleSuggestionClick}
+                />
+              ) : undefined
+            }
           />
 
           {/* Message Input */}
@@ -271,21 +295,28 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
             disabled={chatService.isLoading()}
             enableFileAttachments={true}
             enableMarkdown={true}
+            ref={(handle) => messageInputHandle = handle}
           />
 
-          {/* Footer */}
+          {/* Footer with Disclaimer */}
           <div class="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-3">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-500 dark:text-gray-400">Powered by:</span>
-                <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium rounded">SolidJS</span>
-                <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium rounded">PydanticAI</span>
-                <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-medium rounded">AG-UI</span>
+            <Show when={props.disclaimerText} fallback={
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">Powered by:</span>
+                  <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium rounded">SolidJS</span>
+                  <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium rounded">PydanticAI</span>
+                  <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-medium rounded">AG-UI</span>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  AI can make mistakes. Please verify important information.
+                </p>
               </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
-                AI can make mistakes. Please verify important information.
+            }>
+              <p class="text-xs text-center text-gray-500 dark:text-gray-400">
+                {props.disclaimerText}
               </p>
-            </div>
+            </Show>
           </div>
 
           {/* Agent State Panel */}
