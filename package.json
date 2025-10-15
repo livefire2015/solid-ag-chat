@@ -1,6 +1,6 @@
 {
   "name": "@livefire2015/solid-ag-chat",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "SolidJS chat components for AG-UI protocol integration with PydanticAI",
   "type": "module",
   "main": "./dist/index.cjs",
