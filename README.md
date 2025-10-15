@@ -2,12 +2,19 @@
 
 SolidJS chat components for AG-UI protocol integration with PydanticAI.
 
+[![npm version](https://badge.fury.io/js/@livefire2015%2Fsolid-ag-chat.svg)](https://www.npmjs.com/package/@livefire2015/solid-ag-chat)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## Features
 
 - 🚀 Built with SolidJS for reactive, performant UI
 - 💬 Complete chat interface with message history
 - 🔄 Real-time streaming support via Server-Sent Events (SSE)
 - 🧠 Agent state visualization panel
+- 🤖 Auto-title generation for conversations
+- 🆕 Lazy conversation creation for seamless new chat experience
+- 🔗 Full REST API integration with remote storage
+- 💾 Multiple storage modes (local, remote, hybrid)
 - 📦 TypeScript support out of the box
 - 🎨 Styled with Tailwind CSS classes
 
@@ -27,12 +34,66 @@ npm install solid-js
 
 ## Quick Start
 
+### Basic Usage
+
 ```tsx
 import { ChatInterface } from '@livefire2015/solid-ag-chat';
 
 function App() {
   return (
     <ChatInterface apiUrl="http://localhost:8000/agent/stream" />
+  );
+}
+```
+
+### New Chat Homepage (v0.3.1+)
+
+For a seamless new chat experience where conversations are created on first message:
+
+```tsx
+import { ChatInterface } from '@livefire2015/solid-ag-chat';
+
+function HomePage() {
+  return (
+    <ChatInterface
+      newChatMode={true}
+      autoGenerateTitle={true}
+      storageMode="remote"
+      apiConfig={{
+        baseUrl: 'http://localhost:8000',
+        endpoints: {
+          streamMessage: '/api/chat/c/{conversationId}/stream',
+          createConversationWithMessage: '/api/chat/conversations/with-message',
+          generateTitle: '/api/chat/c/{conversationId}/generate-title'
+        }
+      }}
+    />
+  );
+}
+```
+
+### With Routing
+
+Using SolidJS Router to handle conversation URLs:
+
+```tsx
+import { useParams } from '@solidjs/router';
+
+function ChatPage() {
+  const params = useParams();
+
+  return (
+    <ChatInterface
+      conversationId={params.conversationId}
+      autoGenerateTitle={true}
+      apiConfig={{
+        baseUrl: import.meta.env.VITE_API_BASE_URL,
+        endpoints: {
+          getConversation: '/api/chat/c/{conversationId}',
+          streamMessage: '/api/chat/c/{conversationId}/stream'
+        }
+      }}
+    />
   );
 }
 ```
@@ -50,7 +111,15 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 ```
 
 **Props:**
-- `apiUrl` (optional): The API endpoint for the AG-UI stream. Defaults to `http://localhost:8000/agent/stream`
+- `apiUrl` (optional, deprecated): The API endpoint for the AG-UI stream. Use `apiConfig` instead
+- `apiConfig` (optional): API configuration object with `baseUrl` and custom `endpoints`
+- `storageMode` (optional): Storage mode - `'local'` | `'remote'` | `'hybrid'`. Defaults to `'local'`
+- `conversationId` (optional): Specific conversation ID to load (useful for routing)
+- `newChatMode` (optional): Enable new chat mode for homepage (v0.3.1+). Defaults to `false`
+- `autoGenerateTitle` (optional): Automatically generate conversation titles after assistant response (v0.3.1+). Defaults to `true`
+- `createConversationOnFirstMessage` (optional): Create conversation on first message send (v0.3.1+). Defaults to `false`
+- `title` (optional): Chat interface title. Defaults to `"Nova Chat"`
+- `description` (optional): Chat interface description. Defaults to `"Let language become the interface"`
 
 ### MessageList
 
@@ -97,7 +166,12 @@ A reactive service for managing chat state and AG-UI protocol communication.
 ```tsx
 import { createAGUIService } from '@livefire2015/solid-ag-chat';
 
-const chatService = createAGUIService('http://localhost:8000/agent/stream');
+const chatService = createAGUIService({
+  baseUrl: 'http://localhost:8000',
+  endpoints: {
+    streamMessage: '/agent/stream'
+  }
+});
 
 // Access reactive state
 const messages = chatService.messages();
@@ -106,22 +180,64 @@ const error = chatService.error();
 const agentState = chatService.agentState();
 
 // Send messages
-await chatService.sendMessage('Hello!');
+await chatService.sendMessage('Hello!', undefined, conversationId);
+
+// Set auto-title generation callback (v0.3.1+)
+chatService.setAutoTitleCallback(async (convId) => {
+  // Your auto-title generation logic
+});
 
 // Clear state
 chatService.clearMessages();
 chatService.clearAgentState();
 ```
 
+## Storage Modes (v0.3.1+)
+
+### Local Storage (Default)
+Data is stored in the browser's localStorage. Conversations persist across browser sessions but are device-specific.
+
+### Remote Storage
+Data is stored on your backend server. Requires implementing the REST API endpoints.
+
+### Hybrid Storage (Coming Soon)
+Combines local caching with remote sync for offline capability.
+
+## API Endpoints (v0.3.1+)
+
+When using `storageMode="remote"`, implement these REST endpoints:
+
+```typescript
+const endpoints = {
+  // Conversation Management
+  getConversations: '/api/chat/conversations',
+  getConversation: '/api/chat/c/{conversationId}',
+  createConversation: '/api/chat/conversations',
+  createConversationWithMessage: '/api/chat/conversations/with-message',
+  updateConversation: '/api/chat/c/{conversationId}',
+  deleteConversation: '/api/chat/c/{conversationId}',
+  generateTitle: '/api/chat/c/{conversationId}/generate-title',
+
+  // Message Management
+  getMessages: '/api/chat/c/{conversationId}/messages',
+  sendMessage: '/api/chat/c/{conversationId}/messages',
+  streamMessage: '/api/chat/c/{conversationId}/stream',
+  getMessage: '/api/chat/c/{conversationId}/messages/{messageId}',
+  updateMessage: '/api/chat/c/{conversationId}/messages/{messageId}',
+  deleteMessage: '/api/chat/c/{conversationId}/messages/{messageId}'
+}
+```
+
 ## AG-UI Protocol
 
 This package implements the AG-UI protocol for streaming agent interactions. The protocol supports:
 
+- **TEXT_MESSAGE_START/END**: Message lifecycle events
 - **TEXT_MESSAGE_CONTENT**: Full message updates
 - **TEXT_MESSAGE_DELTA**: Incremental message updates
 - **STATE_SNAPSHOT**: Complete agent state
 - **STATE_DELTA**: Partial agent state updates
-- **TOOL_CALL_START/END**: Tool execution events
+- **TOOL_CALL_START/ARGS/END/RESULT**: Tool execution events
 - **ERROR**: Error handling
 
 ## Types
@@ -145,6 +261,51 @@ Components use Tailwind CSS classes. Ensure your project has Tailwind CSS config
 npm install -D tailwindcss
 ```
 
+## Advanced Usage
+
+### Auto-Title Generation
+
+The library can automatically generate conversation titles after the assistant's first response:
+
+```tsx
+<ChatInterface
+  autoGenerateTitle={true}
+  storageMode="remote"
+  apiConfig={{
+    endpoints: {
+      generateTitle: '/api/chat/c/{conversationId}/generate-title'
+    }
+  }}
+/>
+```
+
+### Lazy Conversation Creation
+
+Perfect for homepage/landing page where you want the conversation to be created only when the user sends their first message:
+
+```tsx
+<ChatInterface
+  createConversationOnFirstMessage={true}
+  newChatMode={true}
+/>
+```
+
+### Custom Storage Adapter
+
+You can create your own storage adapter:
+
+```tsx
+import { StorageAdapter } from '@livefire2015/solid-ag-chat';
+
+class MyCustomAdapter implements StorageAdapter {
+  async get(key: string) { /* ... */ }
+  async set(key: string, value: any) { /* ... */ }
+  async remove(key: string) { /* ... */ }
+  async clear() { /* ... */ }
+  async keys() { /* ... */ }
+}
+```
+
 ## Development
 
 ```bash
@@ -154,6 +315,26 @@ npm run build
 # Watch mode
 npm run dev
 ```
+
+## Changelog
+
+### v0.3.1 (Latest)
+- ✨ Auto-title generation for conversations after assistant response
+- 🆕 Lazy conversation creation for homepage new chat flow
+- 🔗 Full REST API implementation in RemoteStorageAdapter
+- 📝 New API endpoints: `createConversationWithMessage`, `generateTitle`
+- 🎯 New props: `newChatMode`, `autoGenerateTitle`, `createConversationOnFirstMessage`
+
+### v0.3.0
+- 🔌 API configuration support with custom endpoints
+- 💾 Multiple storage modes (local/remote/hybrid)
+- 🆔 UUID-based conversation and message routing
+- ⚠️ Deprecated `apiUrl` in favor of `apiConfig`
+
+### v0.2.x
+- Initial release with core chat functionality
+- AG-UI protocol implementation
+- Local storage support
 
 ## License
 

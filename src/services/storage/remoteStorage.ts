@@ -126,18 +126,11 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      // Dummy implementation - return mock data
-      console.log('RemoteStorageAdapter: getConversations() - dummy implementation');
-      return [
-        {
-          id: crypto.randomUUID(),
-          title: 'Remote Conversation 1',
-          description: 'This is a dummy remote conversation',
-          messageCount: 0,
-          lastMessageAt: new Date().toISOString(),
-          createdAt: new Date().toISOString()
-        }
-      ];
+      const response = await this.fetchApi<{ conversations: ConversationSummary[] }>(
+        this.endpoints.getConversations,
+        { method: 'GET' }
+      );
+      return response.conversations || [];
     } catch (error) {
       console.error('Error fetching conversations:', error);
       return [];
@@ -151,15 +144,12 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      // Dummy implementation - return mock data
-      console.log(`RemoteStorageAdapter: getConversation(${conversationId}) - dummy implementation`);
-      return {
-        id: conversationId,
-        title: 'Remote Conversation',
-        messages: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      const response = await this.fetchApi<{ conversation: Conversation }>(
+        this.endpoints.getConversation,
+        { method: 'GET' },
+        { conversationId }
+      );
+      return response.conversation || null;
     } catch (error) {
       console.error('Error fetching conversation:', error);
       return null;
@@ -174,11 +164,38 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      // Dummy implementation - return new UUID
-      console.log(`RemoteStorageAdapter: createConversation(${title}) - dummy implementation`);
-      return crypto.randomUUID();
+      const response = await this.fetchApi<{ conversation: Conversation }>(
+        this.endpoints.createConversation,
+        {
+          method: 'POST',
+          body: JSON.stringify({ title, description })
+        }
+      );
+      return response.conversation.id;
     } catch (error) {
       console.error('Error creating conversation:', error);
+      throw error;
+    }
+  }
+
+  async createConversationWithMessage(title: string, message: string, files?: any[]): Promise<string> {
+    if (!this.endpoints.createConversationWithMessage) {
+      console.warn('createConversationWithMessage endpoint not configured');
+      // Fallback to regular creation
+      return await this.createConversation(title);
+    }
+
+    try {
+      const response = await this.fetchApi<{ conversation: Conversation }>(
+        this.endpoints.createConversationWithMessage,
+        {
+          method: 'POST',
+          body: JSON.stringify({ title, message, files })
+        }
+      );
+      return response.conversation.id;
+    } catch (error) {
+      console.error('Error creating conversation with message:', error);
       throw error;
     }
   }
@@ -190,11 +207,38 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      // Dummy implementation - no-op
-      console.log(`RemoteStorageAdapter: updateConversation(${conversationId}) - dummy implementation`);
+      await this.fetchApi(
+        this.endpoints.updateConversation,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(updates)
+        },
+        { conversationId }
+      );
     } catch (error) {
       console.error('Error updating conversation:', error);
       throw error;
+    }
+  }
+
+  async generateTitle(conversationId: string): Promise<string | null> {
+    if (!this.endpoints.generateTitle) {
+      console.warn('generateTitle endpoint not configured');
+      return null;
+    }
+
+    try {
+      const response = await this.fetchApi<{ title: string }>(
+        this.endpoints.generateTitle,
+        {
+          method: 'POST'
+        },
+        { conversationId }
+      );
+      return response.title || null;
+    } catch (error) {
+      console.error('Error generating title:', error);
+      return null;
     }
   }
 
@@ -205,8 +249,13 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      // Dummy implementation - no-op
-      console.log(`RemoteStorageAdapter: deleteConversation(${conversationId}) - dummy implementation`);
+      await this.fetchApi(
+        this.endpoints.deleteConversation,
+        {
+          method: 'DELETE'
+        },
+        { conversationId }
+      );
     } catch (error) {
       console.error('Error deleting conversation:', error);
       throw error;
@@ -239,9 +288,12 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      // Dummy implementation - return empty array
-      console.log(`RemoteStorageAdapter: getMessages(${conversationId}) - dummy implementation`);
-      return [];
+      const response = await this.fetchApi<{ messages: any[] }>(
+        this.endpoints.getMessages,
+        { method: 'GET' },
+        { conversationId }
+      );
+      return response.messages || [];
     } catch (error) {
       console.error('Error fetching messages:', error);
       return [];
@@ -255,8 +307,14 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      // Dummy implementation - no-op
-      console.log(`RemoteStorageAdapter: sendMessage(${conversationId}) - dummy implementation`);
+      await this.fetchApi(
+        this.endpoints.sendMessage,
+        {
+          method: 'POST',
+          body: JSON.stringify(message)
+        },
+        { conversationId }
+      );
     } catch (error) {
       console.error('Error sending message:', error);
       throw error;

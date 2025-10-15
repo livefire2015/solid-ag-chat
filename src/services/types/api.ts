@@ -3,8 +3,10 @@ export interface ApiEndpoints {
   getConversations?: string;
   getConversation?: string;
   createConversation?: string;
+  createConversationWithMessage?: string;
   updateConversation?: string;
   deleteConversation?: string;
+  generateTitle?: string;
 
   // Message management
   getMessages?: string;
@@ -29,8 +31,10 @@ export const DEFAULT_ENDPOINTS: ApiEndpoints = {
   getConversations: '/chat/conversations',
   getConversation: '/chat/c/{conversationId}',
   createConversation: '/chat/conversations',
+  createConversationWithMessage: '/chat/conversations/with-message',
   updateConversation: '/chat/c/{conversationId}',
   deleteConversation: '/chat/c/{conversationId}',
+  generateTitle: '/chat/c/{conversationId}/generate-title',
 
   // Message management
   getMessages: '/chat/c/{conversationId}/messages',
