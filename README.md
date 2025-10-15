@@ -72,6 +72,50 @@ function HomePage() {
 }
 ```
 
+### With Suggestions and Empty State (v0.3.2+)
+
+Create an engaging welcome experience with suggestion cards:
+
+```tsx
+import { ChatInterface } from '@livefire2015/solid-ag-chat';
+
+function ChatPage() {
+  const suggestions = [
+    {
+      id: "help",
+      icon: "❓",
+      category: "General",
+      title: "What can you help me with?",
+      description: "Get an overview of my capabilities"
+    },
+    {
+      id: "explain",
+      icon: "🧠",
+      category: "Learning",
+      title: "Explain a technical concept",
+      description: "Break down complex topics into simple terms"
+    },
+    {
+      id: "coding",
+      icon: "💻",
+      category: "Development",
+      title: "Help me with coding",
+      description: "Get assistance with programming tasks"
+    }
+  ];
+
+  return (
+    <ChatInterface
+      apiUrl="http://localhost:8000/agent/stream"
+      userName="Developer"
+      suggestions={suggestions}
+      showEmptyState={true}
+      disclaimerText="AI can make mistakes. Please verify important information."
+    />
+  );
+}
+```
+
 ### With Routing
 
 Using SolidJS Router to handle conversation URLs:
@@ -120,6 +164,10 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 - `createConversationOnFirstMessage` (optional): Create conversation on first message send (v0.3.1+). Defaults to `false`
 - `title` (optional): Chat interface title. Defaults to `"Nova Chat"`
 - `description` (optional): Chat interface description. Defaults to `"Let language become the interface"`
+- `userName` (optional): User name displayed in empty state (v0.3.2+)
+- `suggestions` (optional): Array of suggestion items for empty state (v0.3.2+)
+- `showEmptyState` (optional): Whether to show empty state with suggestions. Defaults to `true`
+- `disclaimerText` (optional): Custom disclaimer text in footer (v0.3.2+)
 
 ### MessageList
 
@@ -155,6 +203,53 @@ Side panel for visualizing agent state.
 import { StatePanel } from '@livefire2015/solid-ag-chat';
 
 <StatePanel agentState={agentState()} />
+```
+
+### EmptyState
+
+Welcome screen with personalized greeting and suggestion cards (v0.3.2+).
+
+```tsx
+import { EmptyState } from '@livefire2015/solid-ag-chat';
+
+const suggestions = [
+  {
+    id: "help",
+    category: "General",
+    title: "What can you help me with?",
+    description: "Get an overview of my capabilities"
+  }
+];
+
+<EmptyState
+  userName="Developer"
+  suggestions={suggestions}
+  onSuggestionClick={(suggestion) => {
+    // Handle suggestion click
+    console.log('Clicked:', suggestion.title);
+  }}
+/>
+```
+
+### SuggestionCard
+
+Interactive suggestion cards that populate the message input (v0.3.2+).
+
+```tsx
+import { SuggestionCard } from '@livefire2015/solid-ag-chat';
+
+<SuggestionCard
+  suggestion={{
+    id: "coding",
+    icon: "💻",
+    category: "Development",
+    title: "Help me with coding",
+    description: "Get assistance with programming tasks"
+  }}
+  onClick={() => {
+    // Handle click
+  }}
+/>
 ```
 
 ## Services
@@ -249,7 +344,9 @@ import type {
   AGUIMessage,
   AGUIEvent,
   AgentState,
-  ChatService
+  ChatService,
+  SuggestionItem,
+  ApiConfig
 } from '@livefire2015/solid-ag-chat';
 ```
 
@@ -318,7 +415,17 @@ npm run dev
 
 ## Changelog
 
-### v0.3.1 (Latest)
+### v0.3.3 (Latest)
+- 🔧 Fixed apiUrl prop to handle complete endpoint URIs correctly
+- 📝 Improved backwards compatibility documentation
+
+### v0.3.2
+- 🎨 Added EmptyState component with personalized welcome experience
+- 💡 Added SuggestionCard component for interactive conversation starters
+- 🎯 New props: `userName`, `suggestions`, `showEmptyState`, `disclaimerText`
+- 🔄 Enhanced ChatInterface with suggestion click handling
+
+### v0.3.1
 - ✨ Auto-title generation for conversations after assistant response
 - 🆕 Lazy conversation creation for homepage new chat flow
 - 🔗 Full REST API implementation in RemoteStorageAdapter
