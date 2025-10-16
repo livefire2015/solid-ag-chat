@@ -148,15 +148,36 @@ export class RemoteStorageAdapter implements StorageAdapter {
     }
 
     try {
-      const response = await this.fetchApi<{ conversation: Conversation }>(
+      // Fetch conversation metadata
+      const convResponse = await this.fetchApi<any>(
         this.endpoints.getConversation,
         { method: 'GET' },
         { conversationId }
       );
-      if (response.conversation) {
-        this.existingConversationIds.add(conversationId);
+
+      if (!convResponse) {
+        return null;
       }
-      return response.conversation || null;
+
+      // Fetch messages separately
+      const messages = await this.getMessages(conversationId);
+
+      // Combine into full Conversation object
+      const conversation: Conversation = {
+        id: convResponse.id,
+        title: convResponse.metadata?.title || 'Untitled Conversation',
+        description: convResponse.metadata?.description,
+        messages: messages,
+        createdAt: convResponse.created_at,
+        updatedAt: convResponse.updated_at,
+        tags: convResponse.metadata?.tags || [],
+        archived: convResponse.metadata?.archived || false,
+        starred: convResponse.metadata?.starred || false,
+        metadata: convResponse.metadata
+      };
+
+      this.existingConversationIds.add(conversationId);
+      return conversation;
     } catch (error) {
       console.error('Error fetching conversation:', error);
       return null;
@@ -300,7 +321,19 @@ export class RemoteStorageAdapter implements StorageAdapter {
         { method: 'GET' },
         { conversationId }
       );
-      return response.messages || [];
+
+      // Transform backend messages to frontend EnhancedAGUIMessage format
+      const messages = (response.messages || []).map(msg => ({
+        id: msg.id,
+        conversationId: msg.conversation_id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.created_at,
+        isMarkdown: msg.role === 'assistant',
+        isEdited: false
+      }));
+
+      return messages;
     } catch (error) {
       console.error('Error fetching messages:', error);
       return [];
