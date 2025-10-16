@@ -1,4 +1,4 @@
-import { Component, Show, createSignal, onMount } from 'solid-js';
+import { Component, Show, createSignal, onMount, createMemo } from 'solid-js';
 import { createAGUIService } from '../services/agui-service';
 import { createConversationStore } from '../stores/conversation-store';
 import { StorageManager, createLocalStorageAdapter, createRemoteStorageAdapter } from '../services/storage';
@@ -64,6 +64,14 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   const shouldAutoLoad = props.loadConversationsOnMount !== false && !props.newChatMode && !props.createConversationOnFirstMessage;
   const conversationStore = createConversationStore(storageManager, shouldAutoLoad);
   const [showConversations, setShowConversations] = createSignal(false);
+
+  // Only access conversations when sidebar should be shown
+  const sidebarConversations = createMemo(() => {
+    if (showConversations() && props.showSidebar !== false) {
+      return conversationStore.conversations();
+    }
+    return [];
+  });
 
   // Reference to MessageInput for programmatic control
   let messageInputHandle: MessageInputHandle | undefined;
@@ -224,7 +232,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
         <Show when={showConversations() && props.showSidebar !== false}>
           <div class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
             <ConversationList
-              conversations={conversationStore.conversations()}
+              conversations={sidebarConversations()}
               currentConversationId={conversationStore.currentConversationId()}
               onConversationSelect={handleConversationSelect}
               onConversationCreate={handleNewConversation}
