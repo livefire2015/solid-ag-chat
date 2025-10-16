@@ -330,7 +330,18 @@ export class RemoteStorageAdapter implements StorageAdapter {
         content: msg.content,
         timestamp: msg.created_at,
         isMarkdown: msg.role === 'assistant',
-        isEdited: false
+        isEdited: false,
+        // Transform tool calls if present
+        streamingToolCalls: msg.tool_calls ? msg.tool_calls.map((tc: any) => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: JSON.stringify(tc.arguments),
+          parsedArguments: tc.arguments,
+          result: tc.result || '',
+          status: tc.status || 'completed',
+          startedAt: msg.created_at,
+          completedAt: msg.created_at
+        })) : undefined
       }));
 
       return messages;
