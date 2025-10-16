@@ -608,7 +608,7 @@ const endpoints = {
 
 ## AG-UI Protocol
 
-This package implements the AG-UI protocol for streaming agent interactions. The protocol supports:
+This package implements the AG-UI protocol for streaming agent interactions using official `@ag-ui/core` types (v0.5.0+). The protocol supports:
 
 - **TEXT_MESSAGE_START/END**: Message lifecycle events
 - **TEXT_MESSAGE_CONTENT**: Full message updates
@@ -617,6 +617,12 @@ This package implements the AG-UI protocol for streaming agent interactions. The
 - **STATE_DELTA**: Partial agent state updates
 - **TOOL_CALL_START/ARGS/END/RESULT**: Tool execution events
 - **ERROR**: Error handling
+
+**Official AG-UI Integration (v0.5.0+):**
+- Uses official `EventType` enum from `@ag-ui/core`
+- Runtime validation with official `EventSchemas` (when available)
+- Full compatibility with the AG-UI ecosystem
+- Enhanced type safety and IntelliSense support
 
 ## Types
 
@@ -780,6 +786,49 @@ interface ChatInterfaceProps {
 - Local storage support
 
 ## Migration Guides
+
+### v0.5.0 Migration Guide - @ag-ui/core Integration
+
+**NEW**: v0.5.0 integrates with the official `@ag-ui/core` TypeScript types and events for improved standardization and future compatibility.
+
+**What Changed:**
+- Added `@ag-ui/core` dependency for official AG-UI protocol types
+- Created compatibility layer for gradual migration
+- Enhanced runtime validation with official EventSchemas (when available)
+- Improved type safety and IntelliSense support
+
+**Benefits:**
+- **Standardization**: Uses official AG-UI protocol types
+- **Future-Proofing**: Seamless transition when `@ag-ui/core` API stabilizes
+- **Type Safety**: Enhanced TypeScript support with official interfaces
+- **Validation**: Runtime event validation with official schemas
+- **Backward Compatibility**: All existing code continues to work
+
+**No Breaking Changes:**
+All v0.4.x code continues to work unchanged. The migration is fully backward compatible.
+
+**Enhanced Features:**
+```tsx
+// Official AG-UI types are now used internally
+import type {
+  EventType,           // Official AG-UI event enum
+  AGUIMessage,         // Official message interface
+  AGUIEvent,          // Official event union type
+  EnhancedAGUIMessage, // Extended with solid-ag-chat features
+} from '@livefire2015/solid-ag-chat';
+
+// Runtime validation automatically uses official schemas when available
+const chatService = createAGUIService({
+  baseUrl: 'http://localhost:8000',
+  // EventSchemas validation is applied automatically
+});
+```
+
+**Migration Benefits:**
+- **Immediate**: Better TypeScript IntelliSense and type checking
+- **Future**: Automatic compatibility with official AG-UI ecosystem
+- **Performance**: Optimized event handling with official types
+- **Validation**: Runtime safety with official event schemas
 
 ### v0.4.1 Migration Guide - Dramatic API Simplification
 
