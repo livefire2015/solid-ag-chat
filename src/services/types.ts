@@ -452,36 +452,51 @@ export interface StorageManagerConfig {
   onStatusChange?: StatusChangeCallback;
 }
 
-// Controlled Mode Types (v0.4.0+)
-export interface ControlledConversationProps {
-  conversations?: ConversationSummary[];
-  currentConversationId?: string;
-  onConversationChange?: (id: string) => void;
-  onConversationCreate?: (data: Partial<Conversation>) => Promise<string>;
-  onConversationUpdate?: (id: string, updates: Partial<Conversation>) => Promise<void>;
-  onConversationDelete?: (id: string) => Promise<void>;
-  onConversationSelect?: (id: string) => Promise<void>;
-  onConversationDuplicate?: (id: string) => Promise<string>;
-  onConversationArchive?: (id: string) => Promise<void>;
-  onConversationStar?: (id: string) => Promise<void>;
-}
+// Simplified Chat Configuration (v0.4.1+)
+export interface ChatConfig {
+  // API & Storage
+  apiConfig?: import('./types/api').ApiConfig;
+  storageConfig?: import('./types/api').ApiConfig; // Falls back to apiConfig if not provided
 
-// Enhanced Chat Interface Props (v0.4.0+)
-export interface DependencyInjectionProps {
-  // Inject pre-configured services (optional)
+  // Services (for dependency injection)
   chatService?: ChatService;
-  storageManager?: any; // Use any to avoid conflict with StorageManager class
   storageAdapter?: StorageAdapter;
 
-  // Split API configurations
-  chatApiConfig?: import('./types/api').ApiConfig;      // For streaming
-  storageApiConfig?: import('./types/api').ApiConfig;   // For CRUD
+  // Conversation behavior
+  conversationId?: string;
+  autoTitle?: boolean;
+  createOnFirstMessage?: boolean;
 
-  // Status change callbacks
-  onStatusChange?: StatusChangeCallback;
-  onChatStatusChange?: StatusChangeCallback;
-  onStorageStatusChange?: StatusChangeCallback;
+  // UI
+  title?: string;
+  description?: string;
+  userName?: string;
+  suggestions?: SuggestionItem[];
+  showSidebar?: boolean;
+  disclaimerText?: string;
+
+  // Controlled mode data
+  conversations?: ConversationSummary[];
+  currentConversationId?: string;
 }
+
+// Simplified Event Handlers (v0.4.1+)
+export interface ChatEventHandlers {
+  // Status
+  onStatusChange?: (status: ServiceStatus) => void;
+
+  // Navigation
+  onNewConversation?: () => void;
+
+  // Conversation lifecycle (for controlled mode)
+  onConversationCreate?: (data: Partial<Conversation>) => Promise<string>;
+  onConversationSelect?: (id: string) => void;
+  onConversationUpdate?: (id: string, updates: Partial<Conversation>) => Promise<void>;
+  onConversationDelete?: (id: string) => Promise<void>;
+}
+
+// Chat Mode Types (v0.4.1+)
+export type ChatMode = 'local' | 'remote' | 'controlled';
 
 // Export API types
 export * from './types/api';

@@ -46,7 +46,92 @@ function App() {
 }
 ```
 
-### New Chat Homepage (v0.3.1+)
+### Simple Configuration (v0.4.1+)
+
+```tsx
+import { ChatInterface } from '@livefire2015/solid-ag-chat';
+
+function App() {
+  return (
+    <ChatInterface
+      mode="remote"
+      config={{
+        apiConfig: {
+          baseUrl: 'https://api.myapp.com',
+          headers: { 'Authorization': `Bearer ${token}` }
+        },
+        userName: 'Developer',
+        autoTitle: true
+      }}
+      onEvents={{
+        onStatusChange: (status) => showToast(status.error),
+        onNewConversation: () => navigate('/chat')
+      }}
+    />
+  );
+}
+```
+
+### Local Chat (v0.4.1+)
+
+```tsx
+function LocalChatPage() {
+  return (
+    <ChatInterface
+      mode="local"
+      config={{
+        userName: 'Developer',
+        suggestions: [
+          {
+            id: "help",
+            icon: "❓",
+            category: "General",
+            title: "What can you help me with?",
+            description: "Get an overview of my capabilities"
+          }
+        ]
+      }}
+    />
+  );
+}
+```
+
+### Controlled Mode (v0.4.1+)
+
+```tsx
+function ControlledChatPage() {
+  const [conversations, setConversations] = createSignal([]);
+  const [currentId, setCurrentId] = createSignal(null);
+
+  return (
+    <ChatInterface
+      mode="controlled"
+      config={{
+        conversations: conversations(),
+        currentConversationId: currentId()
+      }}
+      onEvents={{
+        onConversationCreate: async (data) => {
+          const response = await fetch('/api/conversations', {
+            method: 'POST',
+            body: JSON.stringify(data)
+          });
+          const conv = await response.json();
+          setConversations([conv, ...conversations()]);
+          setCurrentId(conv.id);
+          return conv.id;
+        },
+        onConversationSelect: (id) => {
+          setCurrentId(id);
+          navigate(`/chat/${id}`);
+        }
+      }}
+    />
+  );
+}
+```
+
+### New Chat Homepage (v0.4.1+)
 
 For a seamless new chat experience where conversations are created on first message:
 
@@ -56,23 +141,25 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 function HomePage() {
   return (
     <ChatInterface
-      newChatMode={true}
-      autoGenerateTitle={true}
-      storageMode="remote"
-      apiConfig={{
-        baseUrl: 'http://localhost:8000',
-        endpoints: {
-          streamMessage: '/api/chat/c/{conversationId}/stream',
-          createConversationWithMessage: '/api/chat/conversations/with-message',
-          generateTitle: '/api/chat/c/{conversationId}/generate-title'
-        }
+      mode="remote"
+      config={{
+        apiConfig: {
+          baseUrl: 'http://localhost:8000',
+          endpoints: {
+            streamMessage: '/api/chat/c/{conversationId}/stream',
+            createConversationWithMessage: '/api/chat/conversations/with-message',
+            generateTitle: '/api/chat/c/{conversationId}/generate-title'
+          }
+        },
+        autoTitle: true,
+        createOnFirstMessage: true
       }}
     />
   );
 }
 ```
 
-### With Suggestions and Empty State (v0.3.2+)
+### With Suggestions and Empty State (v0.4.1+)
 
 Create an engaging welcome experience with suggestion cards:
 
@@ -106,17 +193,21 @@ function ChatPage() {
 
   return (
     <ChatInterface
-      apiUrl="http://localhost:8000/agent/stream"
-      userName="Developer"
-      suggestions={suggestions}
-      showEmptyState={true}
-      disclaimerText="AI can make mistakes. Please verify important information."
+      config={{
+        apiConfig: {
+          baseUrl: 'http://localhost:8000',
+          endpoints: { streamMessage: '/agent/stream' }
+        },
+        userName: 'Developer',
+        suggestions,
+        disclaimerText: 'AI can make mistakes. Please verify important information.'
+      }}
     />
   );
 }
 ```
 
-### New Chat Mode (v0.3.5+)
+### New Chat Mode (v0.4.1+)
 
 For new chat interfaces that don't need to load existing conversations:
 
@@ -126,19 +217,18 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 function NewChatPage() {
   return (
     <ChatInterface
-      newChatMode={true}
-      loadConversationsOnMount={false}
-      showSidebar={false}
-      createConversationOnFirstMessage={true}
-      storageMode="local"
-      suggestions={suggestions}
-      showEmptyState={true}
+      mode="local"
+      config={{
+        createOnFirstMessage: true,
+        showSidebar: false,
+        suggestions
+      }}
     />
   );
 }
 ```
 
-### With Routing
+### With Routing (v0.4.1+)
 
 Using SolidJS Router to handle conversation URLs:
 
@@ -150,13 +240,16 @@ function ChatPage() {
 
   return (
     <ChatInterface
-      conversationId={params.conversationId}
-      autoGenerateTitle={true}
-      apiConfig={{
-        baseUrl: import.meta.env.VITE_API_BASE_URL,
-        endpoints: {
-          getConversation: '/api/chat/c/{conversationId}',
-          streamMessage: '/api/chat/c/{conversationId}/stream'
+      mode="remote"
+      config={{
+        conversationId: params.conversationId,
+        autoTitle: true,
+        apiConfig: {
+          baseUrl: import.meta.env.VITE_API_BASE_URL,
+          endpoints: {
+            getConversation: '/api/chat/c/{conversationId}',
+            streamMessage: '/api/chat/c/{conversationId}/stream'
+          }
         }
       }}
     />
@@ -164,7 +257,7 @@ function ChatPage() {
 }
 ```
 
-### With Custom New Conversation Handler (v0.3.7+)
+### With Custom New Conversation Handler (v0.4.1+)
 
 For routing-based navigation without API calls when creating new conversations:
 
@@ -176,15 +269,19 @@ function ChatPage() {
 
   return (
     <ChatInterface
-      storageMode="remote"
-      onNewConversation={() => {
-        // Navigate to new chat page without making API calls
-        navigate('/chat');
+      mode="remote"
+      config={{
+        apiConfig: {
+          baseUrl: 'http://localhost:3001',
+          endpoints: {
+            streamMessage: '/api/chat/c/{conversationId}/stream'
+          }
+        }
       }}
-      apiConfig={{
-        baseUrl: 'http://localhost:3001',
-        endpoints: {
-          streamMessage: '/api/chat/c/{conversationId}/stream'
+      onEvents={{
+        onNewConversation: () => {
+          // Navigate to new chat page without making API calls
+          navigate('/chat');
         }
       }}
     />
@@ -192,14 +289,14 @@ function ChatPage() {
 }
 ```
 
-### With Dependency Injection (v0.4.0+)
+### With Dependency Injection (v0.4.1+)
 
 Inject pre-configured services for custom auth, retries, or caching:
 
 ```tsx
 import { ChatInterface } from '@livefire2015/solid-ag-chat';
 import { createAGUIService } from '@livefire2015/solid-ag-chat';
-import { createRemoteStorageAdapter, StorageManager } from '@livefire2015/solid-ag-chat';
+import { createRemoteStorageAdapter } from '@livefire2015/solid-ag-chat';
 
 function ProductionChatPage() {
   // Create auth-aware chat service
@@ -227,15 +324,17 @@ function ProductionChatPage() {
     }
   });
 
-  const storageManager = new StorageManager(storageAdapter);
-
   return (
     <ChatInterface
-      chatService={chatService}
-      storageManager={storageManager}
-      onStatusChange={(status) => {
-        if (status.error) {
-          showNotification(`Chat error: ${status.error}`);
+      config={{
+        chatService,
+        storageAdapter
+      }}
+      onEvents={{
+        onStatusChange: (status) => {
+          if (status.error) {
+            showNotification(`Chat error: ${status.error}`);
+          }
         }
       }}
     />
@@ -243,7 +342,7 @@ function ProductionChatPage() {
 }
 ```
 
-### With Split API Configuration (v0.4.0+)
+### With Split API Configuration (v0.4.1+)
 
 Use different hosts for streaming vs CRUD operations:
 
@@ -251,73 +350,31 @@ Use different hosts for streaming vs CRUD operations:
 function MultiHostChatPage() {
   return (
     <ChatInterface
-      // Streaming chat goes to one service
-      chatApiConfig={{
-        baseUrl: 'https://chat-stream.myapp.com',
-        headers: { 'Authorization': `Bearer ${getChatToken()}` },
-        endpoints: {
-          streamMessage: '/v1/stream'
+      mode="remote"
+      config={{
+        // Streaming chat goes to one service
+        apiConfig: {
+          baseUrl: 'https://chat-stream.myapp.com',
+          headers: { 'Authorization': `Bearer ${getChatToken()}` },
+          endpoints: {
+            streamMessage: '/v1/stream'
+          }
+        },
+        // CRUD operations go to another service
+        storageConfig: {
+          baseUrl: 'https://api.myapp.com',
+          headers: { 'Authorization': `Bearer ${getApiToken()}` },
+          endpoints: {
+            getConversations: '/v2/conversations',
+            createConversationWithMessage: '/v2/conversations/create'
+          }
         }
       }}
-      // CRUD operations go to another service
-      storageApiConfig={{
-        baseUrl: 'https://api.myapp.com',
-        headers: { 'Authorization': `Bearer ${getApiToken()}` },
-        endpoints: {
-          getConversations: '/v2/conversations',
-          createConversationWithMessage: '/v2/conversations/create'
-        }
-      }}
-      storageMode="remote"
     />
   );
 }
 ```
 
-### With Controlled Mode (v0.4.0+)
-
-Take full control over conversation state management:
-
-```tsx
-function ControlledChatPage() {
-  const [conversations, setConversations] = createSignal([]);
-  const [currentConversationId, setCurrentConversationId] = createSignal(null);
-
-  const handleConversationCreate = async (data) => {
-    const response = await fetch('/api/conversations', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-    const newConversation = await response.json();
-
-    setConversations([newConversation, ...conversations()]);
-    setCurrentConversationId(newConversation.id);
-    navigate(`/chat/${newConversation.id}`);
-
-    return newConversation.id;
-  };
-
-  return (
-    <ChatInterface
-      controlled={true}
-      conversations={conversations()}
-      currentConversationId={currentConversationId()}
-      onConversationCreate={handleConversationCreate}
-      onConversationSelect={(id) => {
-        setCurrentConversationId(id);
-        navigate(`/chat/${id}`);
-      }}
-      onConversationUpdate={async (id, updates) => {
-        await fetch(`/api/conversations/${id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(updates)
-        });
-        // Update local state...
-      }}
-    />
-  );
-}
-```
 
 ## Components
 
@@ -331,58 +388,69 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 <ChatInterface apiUrl="http://localhost:8000/agent/stream" />
 ```
 
-**Props:**
+**Props (v0.4.1+):**
 
-**Legacy Props (Backward Compatible):**
-- `apiUrl` (optional, deprecated): The API endpoint for the AG-UI stream. Use `chatApiConfig` instead
-- `apiConfig` (optional, deprecated): API configuration object. Use `chatApiConfig` and `storageApiConfig` instead
+```tsx
+interface ChatInterfaceProps {
+  apiUrl?: string;           // Backward compatibility only
+  mode?: 'local' | 'remote' | 'controlled';
+  config?: Partial<ChatConfig>;
+  onEvents?: Partial<ChatEventHandlers>;
+}
+```
 
-**Core Configuration:**
-- `storageMode` (optional): Storage mode - `'local'` | `'remote'` | `'hybrid'`. Defaults to `'local'`
-- `conversationId` (optional): Specific conversation ID to load (useful for routing)
-- `newChatMode` (optional): Enable new chat mode for homepage. Defaults to `false`
-- `autoGenerateTitle` (optional): Automatically generate conversation titles after assistant response. Defaults to `true`
-- `createConversationOnFirstMessage` (optional): Create conversation on first message send. Defaults to `false`
-- `loadConversationsOnMount` (optional): Whether to load conversations on component mount. Defaults to `true`
-- `showSidebar` (optional): Whether to show the conversation sidebar. Defaults to `true`
+**Core Props:**
+- `apiUrl` (optional, backward compatibility): Direct API endpoint (deprecated, use `config.apiConfig` instead)
+- `mode` (optional): Chat mode - `'local'` | `'remote'` | `'controlled'`. Auto-detected if not specified
+- `config` (optional): Configuration object containing all chat settings
+- `onEvents` (optional): Event handlers object containing all callbacks
 
-**UI Configuration:**
-- `title` (optional): Chat interface title. Defaults to `"Nova Chat"`
-- `description` (optional): Chat interface description. Defaults to `"Let language become the interface"`
-- `userName` (optional): User name displayed in empty state
-- `suggestions` (optional): Array of suggestion items for empty state
-- `showEmptyState` (optional): Whether to show empty state with suggestions. Defaults to `true`
-- `disclaimerText` (optional): Custom disclaimer text in footer
+**ChatConfig Options:**
+```tsx
+interface ChatConfig {
+  // API & Storage
+  apiConfig?: ApiConfig;
+  storageConfig?: ApiConfig; // Falls back to apiConfig if not provided
 
-**Event Handlers:**
-- `onNewConversation` (optional): Custom handler for new conversation creation
+  // Services (for dependency injection)
+  chatService?: ChatService;
+  storageAdapter?: StorageAdapter;
 
-**Dependency Injection (v0.4.0+):**
-- `chatService` (optional): Pre-configured chat service with custom auth/headers
-- `storageManager` (optional): Pre-configured storage manager with custom adapter
-- `storageAdapter` (optional): Custom storage adapter implementation
+  // Conversation behavior
+  conversationId?: string;
+  autoTitle?: boolean;
+  createOnFirstMessage?: boolean;
 
-**Split API Configuration (v0.4.0+):**
-- `chatApiConfig` (optional): API config for streaming chat operations
-- `storageApiConfig` (optional): API config for CRUD conversation operations
+  // UI
+  title?: string;
+  description?: string;
+  userName?: string;
+  suggestions?: SuggestionItem[];
+  showSidebar?: boolean;
+  disclaimerText?: string;
 
-**Status Callbacks (v0.4.0+):**
-- `onStatusChange` (optional): Global status change callback for loading/error states
-- `onChatStatusChange` (optional): Chat-specific status change callback
-- `onStorageStatusChange` (optional): Storage-specific status change callback
+  // Controlled mode data
+  conversations?: ConversationSummary[];
+  currentConversationId?: string;
+}
+```
 
-**Controlled Mode (v0.4.0+):**
-- `controlled` (optional): Explicitly enable controlled mode
-- `conversations` (optional): External conversation list (enables controlled mode)
-- `currentConversationId` (optional): External current conversation ID
-- `onConversationChange` (optional): Callback when conversation selection changes
-- `onConversationCreate` (optional): Callback for creating new conversations
-- `onConversationUpdate` (optional): Callback for updating conversations
-- `onConversationDelete` (optional): Callback for deleting conversations
-- `onConversationSelect` (optional): Callback for selecting conversations
-- `onConversationDuplicate` (optional): Callback for duplicating conversations
-- `onConversationArchive` (optional): Callback for archiving conversations
-- `onConversationStar` (optional): Callback for starring conversations
+**ChatEventHandlers Options:**
+```tsx
+interface ChatEventHandlers {
+  // Status
+  onStatusChange?: (status: ServiceStatus) => void;
+
+  // Navigation
+  onNewConversation?: () => void;
+
+  // Conversation lifecycle (for controlled mode)
+  onConversationCreate?: (data: Partial<Conversation>) => Promise<string>;
+  onConversationSelect?: (id: string) => void;
+  onConversationUpdate?: (id: string, updates: Partial<Conversation>) => Promise<void>;
+  onConversationDelete?: (id: string) => Promise<void>;
+}
+```
 
 ### MessageList
 
@@ -581,11 +649,13 @@ The library can automatically generate conversation titles after the assistant's
 
 ```tsx
 <ChatInterface
-  autoGenerateTitle={true}
-  storageMode="remote"
-  apiConfig={{
-    endpoints: {
-      generateTitle: '/api/chat/c/{conversationId}/generate-title'
+  mode="remote"
+  config={{
+    autoTitle: true,
+    apiConfig: {
+      endpoints: {
+        generateTitle: '/api/chat/c/{conversationId}/generate-title'
+      }
     }
   }}
 />
@@ -597,8 +667,9 @@ Perfect for homepage/landing page where you want the conversation to be created 
 
 ```tsx
 <ChatInterface
-  createConversationOnFirstMessage={true}
-  newChatMode={true}
+  config={{
+    createOnFirstMessage: true
+  }}
 />
 ```
 
@@ -630,7 +701,25 @@ npm run dev
 
 ## Changelog
 
-### v0.4.0 (Latest) - Major Architecture Refactor 🚀
+### v0.4.1 (Latest) - Dramatic API Simplification 🎯
+**BREAKING CHANGES - Simplified API:**
+- 🔥 **30+ props → 4 props**: Eliminated "prop soup" for cleaner API
+- 📦 **Consolidated Configuration**: All options now in single `config` object
+- 🎯 **Event Handlers**: All callbacks consolidated into `onEvents` object
+- 🧭 **Smart Mode Detection**: Automatic mode detection based on configuration
+- 🔄 **Cleaner Separation**: Clear distinction between storage location and state control
+
+**New Clean API:**
+```tsx
+interface ChatInterfaceProps {
+  apiUrl?: string;           // Backward compatibility only
+  mode?: 'local' | 'remote' | 'controlled';
+  config?: Partial<ChatConfig>;
+  onEvents?: Partial<ChatEventHandlers>;
+}
+```
+
+### v0.4.0 - Major Architecture Refactor 🚀
 **Breaking Changes & Major Improvements:**
 - 🏗️ **Dependency Injection**: Inject pre-configured `chatService`, `storageManager`, `storageAdapter`
 - 🔄 **Memoized Storage**: Fixed cache-wiping issue in remote storage adapters
@@ -640,7 +729,7 @@ npm run dev
 - 🔔 **Status Callbacks**: `onStatusChange`, `onChatStatusChange`, `onStorageStatusChange`
 - 🧭 **Production Ready**: Designed for real-world remote API integrations
 
-**Migration Guide:** See [v0.4.0 Migration](#v040-migration-guide) below.
+**Migration Guide:** See [Migration Guides](#migration-guides) below.
 
 ### v0.3.7
 - ✨ Added onNewConversation prop for custom new conversation handling
@@ -690,115 +779,85 @@ npm run dev
 - AG-UI protocol implementation
 - Local storage support
 
-## v0.4.0 Migration Guide
+## Migration Guides
 
-### Breaking Changes
+### v0.4.1 Migration Guide - Dramatic API Simplification
 
-**1. Storage Adapter Behavior**
-- Storage adapters are now memoized and persistent across component lifecycle
-- Fixes cache-wiping issues that caused duplicate API calls
-- **Action Required**: None for basic usage, but performance will improve
+**BREAKING CHANGES**: v0.4.1 dramatically simplifies the API from 30+ props to just 4 props.
 
-**2. Enhanced Loading States**
-- Loading states now properly propagate to all UI components
-- **Action Required**: Update any custom loading indicators to use new status callbacks
-
-### New Features You Should Adopt
-
-**1. Split API Configuration (Recommended)**
+**Before (v0.4.0 and earlier) - "Prop Soup":**
 ```tsx
-// Before (v0.3.x)
 <ChatInterface
-  apiConfig={{
-    baseUrl: 'http://localhost:3001',
-    endpoints: {
-      streamMessage: '/chat/stream',
-      getConversations: '/conversations'
-    }
-  }}
-/>
-
-// After (v0.4.0) - Better separation of concerns
-<ChatInterface
+  storageMode="remote"
+  conversationId={params.conversationId}
+  autoGenerateTitle={true}
+  createConversationOnFirstMessage={true}
+  userName="Developer"
+  suggestions={suggestions}
+  showEmptyState={true}
+  disclaimerText="AI can make mistakes"
+  onNewConversation={() => navigate('/chat')}
+  onStatusChange={(status) => showToast(status.error)}
   chatApiConfig={{
-    baseUrl: 'https://chat-api.myapp.com',
-    endpoints: { streamMessage: '/v1/stream' }
+    baseUrl: 'https://api.myapp.com',
+    headers: { 'Authorization': `Bearer ${token}` }
   }}
   storageApiConfig={{
-    baseUrl: 'https://api.myapp.com',
-    endpoints: { getConversations: '/v2/conversations' }
+    baseUrl: 'https://storage.myapp.com'
   }}
 />
 ```
 
-**2. Dependency Injection for Production Apps**
+**After (v0.4.1) - Clean & Simple:**
 ```tsx
-// Before (v0.3.x) - No control over service creation
-<ChatInterface apiConfig={config} />
-
-// After (v0.4.0) - Full control with auth, retries, etc.
-const chatService = createAGUIService({
-  ...config,
-  headers: { 'Authorization': `Bearer ${token}` },
-  timeout: 30000
-});
-
-<ChatInterface chatService={chatService} />
-```
-
-**3. Controlled Mode for Complex Apps**
-```tsx
-// Before (v0.3.x) - Limited external control
 <ChatInterface
-  onNewConversation={() => navigate('/chat')}
-/>
-
-// After (v0.4.0) - Full external control
-<ChatInterface
-  controlled={true}
-  conversations={myConversations}
-  currentConversationId={currentId}
-  onConversationCreate={handleCreate}
-  onConversationSelect={handleSelect}
-/>
-```
-
-**4. Status Callbacks for Better UX**
-```tsx
-// New in v0.4.0 - Monitor loading/error states
-<ChatInterface
-  onStatusChange={(status) => {
-    if (status.loading) showGlobalSpinner();
-    if (status.error) showErrorToast(status.error);
+  mode="remote"
+  config={{
+    conversationId: params.conversationId,
+    autoTitle: true,
+    createOnFirstMessage: true,
+    userName: 'Developer',
+    suggestions,
+    disclaimerText: 'AI can make mistakes',
+    apiConfig: {
+      baseUrl: 'https://api.myapp.com',
+      headers: { 'Authorization': `Bearer ${token}` }
+    },
+    storageConfig: {
+      baseUrl: 'https://storage.myapp.com'
+    }
   }}
-  onChatStatusChange={(status) => {
-    // Handle chat-specific status
-  }}
-  onStorageStatusChange={(status) => {
-    // Handle storage-specific status
+  onEvents={{
+    onNewConversation: () => navigate('/chat'),
+    onStatusChange: (status) => showToast(status.error)
   }}
 />
 ```
 
-### Backward Compatibility
+**Key Changes:**
+1. **30+ props → 4 props**: `mode`, `config`, `onEvents`, `apiUrl` (legacy)
+2. **Smart Mode Detection**: Auto-detects mode based on configuration
+3. **Consolidated Config**: All settings in single `config` object
+4. **Event Consolidation**: All callbacks in single `onEvents` object
+5. **Backward Compatibility**: `apiUrl` prop still works
 
-All v0.3.x code continues to work in v0.4.0 with these deprecation warnings:
-- `apiUrl` prop → Use `chatApiConfig` instead
-- `apiConfig` prop → Use `chatApiConfig` and `storageApiConfig` instead
+### v0.4.0 Migration Guide - Architecture Refactor
 
-### Performance Improvements
+**Storage Adapter Improvements:**
+- Storage adapters are now memoized and persistent across component lifecycle
+- Fixes cache-wiping issues that caused duplicate API calls
 
-**Before v0.4.0 Issues:**
-- Remote storage adapters recreated on every call (cache loss)
-- Loading states not properly propagated
-- No way to inject auth-aware services
+**Enhanced Loading States:**
+- Loading states now properly propagate to all UI components
 
-**After v0.4.0 Benefits:**
-- ✅ Persistent adapters preserve caches
-- ✅ Proper loading state propagation
-- ✅ Full service dependency injection
-- ✅ Split concerns for streaming vs CRUD
-- ✅ Production-ready architecture
+**New Features:**
+- Dependency injection for `chatService` and `storageAdapter`
+- Split API configuration for different concerns
+- Controlled mode for external state management
+- Enhanced status callbacks
+
+**Backward Compatibility:**
+All v0.3.x code continues to work with deprecation warnings.
 
 ## License
 
