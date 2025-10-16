@@ -59,7 +59,7 @@ export interface ConversationStore {
   cleanup: (maxAge?: number) => Promise<void>;
 }
 
-export function createConversationStore(storageManager: StorageManager): ConversationStore {
+export function createConversationStore(storageManager: StorageManager, autoLoad: boolean = true): ConversationStore {
   // Reactive state
   const [conversations, setConversations] = createSignal<ConversationSummary[]>([]);
   const [currentConversation, setCurrentConversation] = createSignal<Conversation | null>(null);
@@ -129,8 +129,10 @@ export function createConversationStore(storageManager: StorageManager): Convers
     }
   };
 
-  // Initialize by loading conversations
-  loadConversations();
+  // Initialize by loading conversations (only if autoLoad is true)
+  if (autoLoad) {
+    loadConversations();
+  }
 
   // Create new conversation
   const createConversation = async (title?: string, initialMessage?: string): Promise<string> => {
