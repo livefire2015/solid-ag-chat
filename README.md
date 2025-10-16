@@ -468,7 +468,13 @@ npm run dev
 
 ## Changelog
 
-### v0.3.7 (Latest)
+### v0.3.8 (Latest)
+- 🔧 Fixed endpoint URL building for streamMessage with conversationId
+- 🎯 Custom endpoints with {conversationId} placeholder now work correctly
+- 📡 Properly uses configured endpoints instead of falling back to /agent/stream
+- ✨ Uses 'default' as fallback conversationId when endpoint requires it
+
+### v0.3.7
 - ✨ Added onNewConversation prop for custom new conversation handling
 - 🧭 Enables pure frontend navigation without API calls for new chat creation
 - 🔄 Maintains backward compatibility with default conversation creation behavior
