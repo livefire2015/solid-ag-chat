@@ -164,6 +164,34 @@ function ChatPage() {
 }
 ```
 
+### With Custom New Conversation Handler (v0.3.7+)
+
+For routing-based navigation without API calls when creating new conversations:
+
+```tsx
+import { useNavigate } from '@solidjs/router';
+
+function ChatPage() {
+  const navigate = useNavigate();
+
+  return (
+    <ChatInterface
+      storageMode="remote"
+      onNewConversation={() => {
+        // Navigate to new chat page without making API calls
+        navigate('/chat');
+      }}
+      apiConfig={{
+        baseUrl: 'http://localhost:3001',
+        endpoints: {
+          streamMessage: '/api/chat/c/{conversationId}/stream'
+        }
+      }}
+    />
+  );
+}
+```
+
 ## Components
 
 ### ChatInterface
@@ -192,6 +220,7 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 - `disclaimerText` (optional): Custom disclaimer text in footer (v0.3.2+)
 - `loadConversationsOnMount` (optional): Whether to load conversations on component mount. Defaults to `true` (v0.3.5+)
 - `showSidebar` (optional): Whether to show the conversation sidebar. Defaults to `true` (v0.3.5+)
+- `onNewConversation` (optional): Custom handler for new conversation creation, useful for routing without API calls (v0.3.7+)
 
 ### MessageList
 
@@ -439,7 +468,16 @@ npm run dev
 
 ## Changelog
 
-### v0.3.5 (Latest)
+### v0.3.7 (Latest)
+- ✨ Added onNewConversation prop for custom new conversation handling
+- 🧭 Enables pure frontend navigation without API calls for new chat creation
+- 🔄 Maintains backward compatibility with default conversation creation behavior
+
+### v0.3.6
+- 🔧 Improved prop evaluation to prevent unwanted API calls in new chat mode
+- 📝 Fixed reactive computation timing issues with showSidebar prop
+
+### v0.3.5
 - 🚫 Fixed loadConversationsOnMount prop to prevent unnecessary API calls in new chat mode
 - 🎛️ Added showSidebar prop to control conversation sidebar visibility
 - 🔧 Improved new chat flow with zero API calls until first message
