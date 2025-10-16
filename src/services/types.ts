@@ -415,5 +415,73 @@ export interface UIState {
   error: string | null;
 }
 
+// Service Status Types (v0.4.0+)
+export interface ServiceStatus {
+  loading: boolean;
+  error?: string;
+  lastUpdated?: string;
+  details?: Record<string, unknown>;
+}
+
+export type StatusChangeCallback = (status: ServiceStatus) => void;
+
+// Chat Service Types (v0.4.0+)
+export interface ChatService {
+  messages: () => EnhancedAGUIMessage[];
+  isLoading: () => boolean;
+  error: () => string | null;
+  agentState: () => AgentState | null;
+  sendMessage: (content: string, files?: any[], conversationId?: string) => Promise<void>;
+  loadMessages: (messages: EnhancedAGUIMessage[]) => void;
+  clearMessages: () => void;
+  clearAgentState: () => void;
+  setAutoTitleCallback?: (callback: (conversationId: string) => Promise<void>) => void;
+}
+
+export interface ChatServiceConfig {
+  apiConfig: import('./types/api').ApiConfig;
+  onAutoTitle?: (conversationId: string) => Promise<void>;
+  onStatusChange?: StatusChangeCallback;
+}
+
+// Note: StorageManager is a class imported from '../services/storage'
+// No interface needed here since we use the actual class
+
+export interface StorageManagerConfig {
+  adapter: StorageAdapter;
+  onStatusChange?: StatusChangeCallback;
+}
+
+// Controlled Mode Types (v0.4.0+)
+export interface ControlledConversationProps {
+  conversations?: ConversationSummary[];
+  currentConversationId?: string;
+  onConversationChange?: (id: string) => void;
+  onConversationCreate?: (data: Partial<Conversation>) => Promise<string>;
+  onConversationUpdate?: (id: string, updates: Partial<Conversation>) => Promise<void>;
+  onConversationDelete?: (id: string) => Promise<void>;
+  onConversationSelect?: (id: string) => Promise<void>;
+  onConversationDuplicate?: (id: string) => Promise<string>;
+  onConversationArchive?: (id: string) => Promise<void>;
+  onConversationStar?: (id: string) => Promise<void>;
+}
+
+// Enhanced Chat Interface Props (v0.4.0+)
+export interface DependencyInjectionProps {
+  // Inject pre-configured services (optional)
+  chatService?: ChatService;
+  storageManager?: any; // Use any to avoid conflict with StorageManager class
+  storageAdapter?: StorageAdapter;
+
+  // Split API configurations
+  chatApiConfig?: import('./types/api').ApiConfig;      // For streaming
+  storageApiConfig?: import('./types/api').ApiConfig;   // For CRUD
+
+  // Status change callbacks
+  onStatusChange?: StatusChangeCallback;
+  onChatStatusChange?: StatusChangeCallback;
+  onStorageStatusChange?: StatusChangeCallback;
+}
+
 // Export API types
 export * from './types/api';

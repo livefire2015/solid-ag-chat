@@ -2,7 +2,15 @@ import { Component, Show, createSignal, onMount, createMemo } from 'solid-js';
 import { createAGUIService } from '../services/agui-service';
 import { createConversationStore } from '../stores/conversation-store';
 import { StorageManager, createLocalStorageAdapter, createRemoteStorageAdapter } from '../services/storage';
-import type { ApiConfig, StorageMode } from '../services/types';
+import type {
+  ApiConfig,
+  StorageMode,
+  ChatService,
+  DependencyInjectionProps,
+  ControlledConversationProps,
+  StatusChangeCallback,
+  ServiceStatus
+} from '../services/types';
 import MessageList from './MessageList';
 import MessageInput, { type MessageInputHandle } from './MessageInput';
 import StatePanel from './StatePanel';
@@ -10,68 +18,177 @@ import ConversationList from './ConversationList';
 import ThemeProvider, { ThemeToggle } from './ThemeProvider';
 import EmptyState from './EmptyState';
 
-interface ChatInterfaceProps {
-  /** @deprecated Use apiConfig instead */
+interface ChatInterfaceProps extends DependencyInjectionProps, ControlledConversationProps {
+  // Legacy Props (maintain backward compatibility)
+  /** @deprecated Use chatApiConfig and storageApiConfig instead */
   apiUrl?: string;
+  /** @deprecated Use chatApiConfig and storageApiConfig instead */
   apiConfig?: ApiConfig;
+
+  // Storage Configuration
   storageMode?: StorageMode;
+
+  // Conversation State (uncontrolled mode)
   conversationId?: string;
   autoGenerateTitle?: boolean;
   createConversationOnFirstMessage?: boolean;
   newChatMode?: boolean;
+  loadConversationsOnMount?: boolean;
+
+  // UI Configuration
   title?: string;
   description?: string;
   userName?: string;
   suggestions?: import('../services/types').SuggestionItem[];
   showEmptyState?: boolean;
   disclaimerText?: string;
-  loadConversationsOnMount?: boolean;
   showSidebar?: boolean;
+
+  // Event Handlers
   onNewConversation?: () => void;
+
+  // Enhanced Props (v0.4.0+)
+  controlled?: boolean; // Explicitly enable controlled mode
 }
 
 const ChatInterface: Component<ChatInterfaceProps> = (props) => {
-  // Create API config from props (backward compatibility)
-  const apiConfig: ApiConfig = props.apiConfig || (props.apiUrl ? {
-    endpoints: {
-      streamMessage: props.apiUrl
-    }
-  } : {
-    baseUrl: 'http://localhost:8000',
-    endpoints: {
-      streamMessage: '/agent/stream'
-    }
+  // Detect controlled mode
+  const isControlled = createMemo(() => {
+    return props.controlled === true || !!(
+      props.conversations ||
+      props.onConversationChange ||
+      props.onConversationCreate ||
+      props.onConversationUpdate ||
+      props.onConversationDelete ||
+      props.onConversationSelect
+    );
   });
 
-  // Create storage adapter based on mode
-  const createStorageAdapter = () => {
+  // Split API configurations with backward compatibility
+  const chatApiConfig = createMemo((): ApiConfig => {
+    if (props.chatApiConfig) return props.chatApiConfig;
+    if (props.apiConfig) return props.apiConfig;
+    if (props.apiUrl) return {
+      endpoints: { streamMessage: props.apiUrl }
+    };
+    return {
+      baseUrl: 'http://localhost:8000',
+      endpoints: { streamMessage: '/agent/stream' }
+    };
+  });
+
+  const storageApiConfig = createMemo((): ApiConfig => {
+    if (props.storageApiConfig) return props.storageApiConfig;
+    if (props.apiConfig) return props.apiConfig;
+    return chatApiConfig(); // Fallback to chat config
+  });
+
+  // Memoized storage adapter creation (fixes cache-wiping issue)
+  const storageAdapter = createMemo(() => {
+    // Use injected adapter if provided
+    if (props.storageAdapter) {
+      return props.storageAdapter;
+    }
+
     const mode = props.storageMode || 'local';
     switch (mode) {
       case 'remote':
-        return createRemoteStorageAdapter(apiConfig);
+        return createRemoteStorageAdapter(storageApiConfig());
       case 'hybrid':
-        // For now, hybrid mode falls back to local
         console.warn('Hybrid storage mode not yet implemented, using local storage');
         return createLocalStorageAdapter();
       case 'local':
       default:
         return createLocalStorageAdapter();
     }
-  };
+  });
 
-  const chatService = createAGUIService(apiConfig);
-  const storageManager = new StorageManager(createStorageAdapter());
-  // Only auto-load conversations if not in new chat mode and loadConversationsOnMount is not false
-  const shouldAutoLoad = props.loadConversationsOnMount !== false && !props.newChatMode && !props.createConversationOnFirstMessage;
-  const conversationStore = createConversationStore(storageManager, shouldAutoLoad);
+  // Dependency injection for services
+  const chatService = createMemo(() => {
+    if (props.chatService) {
+      return props.chatService;
+    }
+    return createAGUIService(chatApiConfig());
+  });
+
+  const storageManager = createMemo(() => {
+    if (props.storageManager) {
+      return props.storageManager;
+    }
+    return new StorageManager(storageAdapter());
+  });
+
+  // Conversation store creation (only for uncontrolled mode)
+  const shouldAutoLoad = createMemo(() => {
+    if (isControlled()) return false;
+    return props.loadConversationsOnMount !== false && !props.newChatMode && !props.createConversationOnFirstMessage;
+  });
+
+  const conversationStore = createMemo(() => {
+    if (isControlled()) {
+      // Return a minimal store interface for controlled mode
+      return null;
+    }
+    return createConversationStore(storageManager(), shouldAutoLoad());
+  });
+
   const [showConversations, setShowConversations] = createSignal(false);
 
-  // Only access conversations when sidebar should be shown
-  const sidebarConversations = createMemo(() => {
-    if (showConversations() && props.showSidebar !== false) {
-      return conversationStore.conversations();
+  // Status and loading state management
+  const [serviceStatus, setServiceStatus] = createSignal<ServiceStatus>({
+    loading: false,
+    error: undefined
+  });
+
+  // Status change callbacks
+  const handleStatusChange = (status: import('../services/types').ServiceStatus) => {
+    setServiceStatus(status);
+    props.onStatusChange?.(status);
+  };
+
+  const handleChatStatusChange = (status: import('../services/types').ServiceStatus) => {
+    props.onChatStatusChange?.(status);
+    handleStatusChange(status);
+  };
+
+  const handleStorageStatusChange = (status: import('../services/types').ServiceStatus) => {
+    props.onStorageStatusChange?.(status);
+    handleStatusChange(status);
+  };
+
+  // Combined loading state for UI
+  const isLoading = createMemo(() => {
+    if (isControlled()) {
+      // In controlled mode, no internal loading state
+      return false;
     }
-    return [];
+    const store = conversationStore();
+    const chat = chatService();
+    return serviceStatus().loading || (store?.isLoading?.() ?? false) || (chat?.isLoading?.() ?? false);
+  });
+
+  // Combined error state for UI
+  const errorState = createMemo(() => {
+    if (isControlled()) {
+      return null;
+    }
+    const store = conversationStore();
+    const chat = chatService();
+    return serviceStatus().error || store?.error?.() || chat?.error?.() || null;
+  });
+
+  // Conversations list (controlled vs uncontrolled)
+  const sidebarConversations = createMemo(() => {
+    if (!showConversations() || props.showSidebar === false) {
+      return [];
+    }
+
+    if (isControlled()) {
+      return props.conversations || [];
+    }
+
+    const store = conversationStore();
+    return store ? store.conversations() : [];
   });
 
   // Reference to MessageInput for programmatic control
@@ -88,148 +205,285 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   const handleAutoTitleGeneration = async (conversationId: string) => {
     if (!props.autoGenerateTitle) return;
 
-    const conversation = conversationStore.currentConversation();
-    if (!conversation) return;
+    try {
+      handleStorageStatusChange({ loading: true });
 
-    // Only generate title for conversations with generic titles
-    const genericTitles = ['New Chat', 'Welcome Chat', 'Chat', 'Conversation'];
-    const isGenericTitle = genericTitles.some(generic =>
-      conversation.title.includes(generic) || conversation.title.match(/^Chat \d+$/)
-    );
-
-    if (isGenericTitle && props.storageMode === 'remote') {
-      try {
-        const storageAdapter = createStorageAdapter();
-        if ('generateTitle' in storageAdapter) {
-          const newTitle = await (storageAdapter as any).generateTitle(conversationId);
-          if (newTitle) {
-            await conversationStore.updateConversation(conversationId, { title: newTitle });
+      if (isControlled()) {
+        // In controlled mode, delegate to parent
+        if (props.onConversationUpdate) {
+          // Generate title via storage adapter
+          const adapter = storageAdapter();
+          if ('generateTitle' in adapter) {
+            const newTitle = await (adapter as any).generateTitle(conversationId);
+            if (newTitle) {
+              await props.onConversationUpdate(conversationId, { title: newTitle });
+            }
           }
         }
-      } catch (error) {
-        console.error('Failed to generate title:', error);
+        return;
       }
+
+      // Uncontrolled mode
+      const store = conversationStore();
+      if (!store) return;
+
+      const conversation = store.currentConversation();
+      if (!conversation) return;
+
+      // Only generate title for conversations with generic titles
+      const genericTitles = ['New Chat', 'Welcome Chat', 'Chat', 'Conversation'];
+      const isGenericTitle = genericTitles.some(generic =>
+        conversation.title.includes(generic) || conversation.title.match(/^Chat \d+$/)
+      );
+
+      if (isGenericTitle && props.storageMode === 'remote') {
+        const adapter = storageAdapter();
+        if ('generateTitle' in adapter) {
+          const newTitle = await (adapter as any).generateTitle(conversationId);
+          if (newTitle) {
+            await store.updateConversation(conversationId, { title: newTitle });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate title:', error);
+      handleStorageStatusChange({ loading: false, error: error instanceof Error ? error.message : 'Title generation failed' });
+    } finally {
+      handleStorageStatusChange({ loading: false });
     }
   };
 
   // Initialize conversation based on conversationId prop and mode
   onMount(async () => {
-    // Set up auto-title callback if enabled
-    if (props.autoGenerateTitle !== false) {
-      chatService.setAutoTitleCallback(handleAutoTitleGeneration);
-    }
+    try {
+      handleStatusChange({ loading: true });
 
-    // Only load conversations if explicitly requested (defaults to true for backward compatibility)
-    const shouldLoadConversations = props.loadConversationsOnMount !== false;
-
-    if (props.conversationId) {
-      // Load specific conversation from URL
-      await conversationStore.loadConversation(props.conversationId);
-      const conversation = conversationStore.currentConversation();
-      if (conversation) {
-        chatService.loadMessages(conversation.messages);
-      } else {
-        // Conversation ID in URL doesn't exist, create a new one with that ID
-        console.warn(`Conversation ${props.conversationId} not found, creating new conversation`);
-        await conversationStore.createConversation('New Chat', props.conversationId);
-        await conversationStore.loadConversation(props.conversationId);
+      // Set up auto-title callback if enabled
+      const chat = chatService();
+      if (props.autoGenerateTitle !== false && chat.setAutoTitleCallback) {
+        chat.setAutoTitleCallback(handleAutoTitleGeneration);
       }
-    } else if (props.newChatMode || props.createConversationOnFirstMessage) {
-      // New chat mode - don't create conversation yet, wait for first message
-      console.log('New chat mode - conversation will be created on first message');
-      // Skip loading conversations list for new chat mode unless explicitly requested
-      return;
-    } else if (shouldLoadConversations) {
-      // Traditional mode - create default conversation if none exist
-      if (conversationStore.conversations().length === 0) {
-        const newConversationId = await conversationStore.createConversation('Welcome Chat');
-        await conversationStore.loadConversation(newConversationId);
-      } else {
-        // Load the most recent conversation
-        const conversations = conversationStore.conversations();
-        await conversationStore.loadConversation(conversations[0].id);
-        const conversation = conversationStore.currentConversation();
+
+      // In controlled mode, delegate initialization to parent
+      if (isControlled()) {
+        if (props.conversationId && props.onConversationSelect) {
+          await props.onConversationSelect(props.conversationId);
+        }
+        return;
+      }
+
+      // Uncontrolled mode initialization
+      const store = conversationStore();
+      if (!store) return;
+
+      const shouldLoadConversations = props.loadConversationsOnMount !== false;
+
+      if (props.conversationId) {
+        // Load specific conversation from URL
+        await store.loadConversation(props.conversationId);
+        const conversation = store.currentConversation();
         if (conversation) {
-          chatService.loadMessages(conversation.messages);
+          chat.loadMessages(conversation.messages);
+        } else {
+          // Conversation ID in URL doesn't exist, create a new one with that ID
+          console.warn(`Conversation ${props.conversationId} not found, creating new conversation`);
+          await store.createConversation('New Chat', props.conversationId);
+          await store.loadConversation(props.conversationId);
+        }
+      } else if (props.newChatMode || props.createConversationOnFirstMessage) {
+        // New chat mode - don't create conversation yet, wait for first message
+        console.log('New chat mode - conversation will be created on first message');
+        return;
+      } else if (shouldLoadConversations) {
+        // Traditional mode - create default conversation if none exist
+        if (store.conversations().length === 0) {
+          const newConversationId = await store.createConversation('Welcome Chat');
+          await store.loadConversation(newConversationId);
+        } else {
+          // Load the most recent conversation
+          const conversations = store.conversations();
+          await store.loadConversation(conversations[0].id);
+          const conversation = store.currentConversation();
+          if (conversation) {
+            chat.loadMessages(conversation.messages);
+          }
         }
       }
+    } catch (error) {
+      console.error('Failed to initialize chat:', error);
+      handleStatusChange({
+        loading: false,
+        error: error instanceof Error ? error.message : 'Initialization failed'
+      });
+    } finally {
+      handleStatusChange({ loading: false });
     }
   });
 
   const handleNewConversation = async () => {
-    // If external handler is provided, use it instead of internal logic
-    if (props.onNewConversation) {
-      props.onNewConversation();
-      return;
-    }
+    try {
+      // If external handler is provided, use it instead of internal logic
+      if (props.onNewConversation) {
+        props.onNewConversation();
+        return;
+      }
 
-    // Default behavior for backward compatibility
-    const title = `Chat ${conversationStore.conversations().length + 1}`;
-    const newConversationId = await conversationStore.createConversation(title);
-    await conversationStore.loadConversation(newConversationId);
-    await conversationStore.loadConversations(); // Refresh list for remote storage
-    chatService.clearMessages();
+      // Controlled mode - delegate to parent
+      if (isControlled() && props.onConversationCreate) {
+        const conversations = props.conversations || [];
+        const title = `Chat ${conversations.length + 1}`;
+        await props.onConversationCreate({ title });
+        return;
+      }
+
+      // Uncontrolled mode - default behavior for backward compatibility
+      const store = conversationStore();
+      if (!store) return;
+
+      handleStorageStatusChange({ loading: true });
+      const title = `Chat ${store.conversations().length + 1}`;
+      const newConversationId = await store.createConversation(title);
+      await store.loadConversation(newConversationId);
+      await store.loadConversations(); // Refresh list for remote storage
+      chatService().clearMessages();
+    } catch (error) {
+      console.error('Failed to create new conversation:', error);
+      handleStorageStatusChange({
+        loading: false,
+        error: error instanceof Error ? error.message : 'Failed to create conversation'
+      });
+    } finally {
+      handleStorageStatusChange({ loading: false });
+    }
   };
 
   const handleConversationSelect = async (conversationId: string) => {
-    await conversationStore.loadConversation(conversationId);
-    const conversation = conversationStore.currentConversation();
-    if (conversation) {
-      chatService.loadMessages(conversation.messages);
+    try {
+      // Controlled mode - delegate to parent
+      if (isControlled()) {
+        if (props.onConversationSelect) {
+          await props.onConversationSelect(conversationId);
+        } else if (props.onConversationChange) {
+          props.onConversationChange(conversationId);
+        }
+        setShowConversations(false);
+        return;
+      }
+
+      // Uncontrolled mode
+      const store = conversationStore();
+      if (!store) return;
+
+      handleStorageStatusChange({ loading: true });
+      await store.loadConversation(conversationId);
+      const conversation = store.currentConversation();
+      if (conversation) {
+        chatService().loadMessages(conversation.messages);
+      }
+      setShowConversations(false);
+    } catch (error) {
+      console.error('Failed to select conversation:', error);
+      handleStorageStatusChange({
+        loading: false,
+        error: error instanceof Error ? error.message : 'Failed to load conversation'
+      });
+    } finally {
+      handleStorageStatusChange({ loading: false });
     }
-    setShowConversations(false);
   };
 
   const handleSendMessage = async (content: string, files?: any[]) => {
-    let currentConv = conversationStore.currentConversation();
-    let conversationId = currentConv?.id || props.conversationId;
+    try {
+      handleChatStatusChange({ loading: true });
 
-    // Lazy conversation creation for new chat mode
-    if (!currentConv && (props.newChatMode || props.createConversationOnFirstMessage)) {
-      try {
-        if (props.storageMode === 'remote') {
-          // Use createConversationWithMessage for remote storage
-          const storageAdapter = createStorageAdapter();
-          if ('createConversationWithMessage' in storageAdapter) {
-            conversationId = await (storageAdapter as any).createConversationWithMessage(
-              'New Chat',
-              content,
-              files
-            );
+      // Controlled mode - delegate message sending to parent or use current conversation ID
+      if (isControlled()) {
+        const conversationId = props.currentConversationId || props.conversationId;
+        if (!conversationId) {
+          // Create new conversation in controlled mode if needed
+          if (props.onConversationCreate) {
+            const newConversationId = await props.onConversationCreate({ title: 'New Chat' });
+            await chatService().sendMessage(content, files, newConversationId);
+            return;
           } else {
-            // Fallback to regular creation
-            conversationId = await conversationStore.createConversation('New Chat');
+            console.error('No conversation ID available and no onConversationCreate handler in controlled mode');
+            return;
           }
-        } else {
-          // For local storage, create conversation normally
-          conversationId = await conversationStore.createConversation('New Chat');
         }
-
-        if (conversationId) {
-          await conversationStore.loadConversation(conversationId);
-          currentConv = conversationStore.currentConversation();
-          // Refresh conversation list for remote storage
-          await conversationStore.loadConversations();
-        }
-      } catch (error) {
-        console.error('Failed to create conversation:', error);
+        await chatService().sendMessage(content, files, conversationId);
         return;
       }
-    }
 
-    if (!conversationId) {
-      console.error('No conversation ID available for sending message');
-      return;
-    }
+      // Uncontrolled mode
+      const store = conversationStore();
+      if (!store) return;
 
-    // Send the message
-    await chatService.sendMessage(content, files, conversationId);
+      let currentConv = store.currentConversation();
+      let conversationId = currentConv?.id || props.conversationId;
 
-    // Update conversation with new messages
-    if (currentConv) {
-      await conversationStore.updateConversation(currentConv.id, {
-        messages: chatService.messages()
+      // Lazy conversation creation for new chat mode
+      if (!currentConv && (props.newChatMode || props.createConversationOnFirstMessage)) {
+        try {
+          if (props.storageMode === 'remote') {
+            // Use createConversationWithMessage for remote storage
+            const adapter = storageAdapter();
+            if ('createConversationWithMessage' in adapter) {
+              conversationId = await (adapter as any).createConversationWithMessage(
+                'New Chat',
+                content,
+                files
+              );
+            } else {
+              // Fallback to regular creation
+              conversationId = await store.createConversation('New Chat');
+            }
+          } else {
+            // For local storage, create conversation normally
+            conversationId = await store.createConversation('New Chat');
+          }
+
+          if (conversationId) {
+            await store.loadConversation(conversationId);
+            currentConv = store.currentConversation();
+            // Refresh conversation list for remote storage
+            await store.loadConversations();
+          }
+        } catch (error) {
+          console.error('Failed to create conversation:', error);
+          handleChatStatusChange({
+            loading: false,
+            error: error instanceof Error ? error.message : 'Failed to create conversation'
+          });
+          return;
+        }
+      }
+
+      if (!conversationId) {
+        console.error('No conversation ID available for sending message');
+        handleChatStatusChange({
+          loading: false,
+          error: 'No conversation ID available'
+        });
+        return;
+      }
+
+      // Send the message
+      await chatService().sendMessage(content, files, conversationId);
+
+      // Update conversation with new messages
+      if (currentConv) {
+        await store.updateConversation(currentConv.id, {
+          messages: chatService().messages()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      handleChatStatusChange({
+        loading: false,
+        error: error instanceof Error ? error.message : 'Failed to send message'
       });
+    } finally {
+      handleChatStatusChange({ loading: false });
     }
   };
 
@@ -241,19 +495,48 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
           <div class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
             <ConversationList
               conversations={sidebarConversations()}
-              currentConversationId={conversationStore.currentConversationId()}
+              currentConversationId={(() => {
+                if (isControlled()) {
+                  return props.currentConversationId || null;
+                }
+                const store = conversationStore();
+                return store?.currentConversationId?.() || null;
+              })()}
               onConversationSelect={handleConversationSelect}
               onConversationCreate={handleNewConversation}
               onConversationDelete={async (id: string) => {
-                await conversationStore.deleteConversation(id);
-                if (conversationStore.conversations().length > 0) {
-                  const firstConv = conversationStore.conversations()[0];
-                  await handleConversationSelect(firstConv.id);
+                try {
+                  if (isControlled() && props.onConversationDelete) {
+                    await props.onConversationDelete(id);
+                  } else {
+                    const store = conversationStore();
+                    if (store) {
+                      await store.deleteConversation(id);
+                      if (store.conversations().length > 0) {
+                        const firstConv = store.conversations()[0];
+                        await handleConversationSelect(firstConv.id);
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.error('Failed to delete conversation:', error);
                 }
               }}
               onConversationRename={async (id: string, newTitle: string) => {
-                await conversationStore.updateConversation(id, { title: newTitle });
+                try {
+                  if (isControlled() && props.onConversationUpdate) {
+                    await props.onConversationUpdate(id, { title: newTitle });
+                  } else {
+                    const store = conversationStore();
+                    if (store) {
+                      await store.updateConversation(id, { title: newTitle });
+                    }
+                  }
+                } catch (error) {
+                  console.error('Failed to rename conversation:', error);
+                }
               }}
+              isLoading={isLoading()}
             />
           </div>
         </Show>
@@ -282,7 +565,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
           </div>
 
           {/* Error Display */}
-          <Show when={chatService.error()}>
+          <Show when={errorState()}>
             <div class="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 mx-4 mt-4">
               <div class="flex items-center">
                 <div class="flex-shrink-0">
@@ -291,11 +574,14 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
                   </svg>
                 </div>
                 <div class="ml-3">
-                  <p class="text-sm text-red-700 dark:text-red-300">{chatService.error()}</p>
+                  <p class="text-sm text-red-700 dark:text-red-300">{errorState()}</p>
                 </div>
                 <div class="ml-auto pl-3">
                   <button
-                    onClick={() => chatService.clearMessages()}
+                    onClick={() => {
+                      chatService().clearMessages();
+                      setServiceStatus({ loading: false });
+                    }}
                     class="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium"
                   >
                     Dismiss
@@ -307,8 +593,8 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
 
           {/* Chat Messages */}
           <MessageList
-            messages={chatService.messages()}
-            isLoading={chatService.isLoading()}
+            messages={chatService().messages()}
+            isLoading={isLoading()}
             enableMarkdown={true}
             emptyStateComponent={
               (props.showEmptyState !== false && (props.userName || props.suggestions)) ? (
@@ -324,7 +610,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
           {/* Message Input */}
           <MessageInput
             onSendMessage={handleSendMessage}
-            disabled={chatService.isLoading()}
+            disabled={isLoading()}
             enableFileAttachments={true}
             enableMarkdown={true}
             ref={(handle) => messageInputHandle = handle}
@@ -352,7 +638,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
           </div>
 
           {/* Agent State Panel */}
-          <StatePanel agentState={chatService.agentState()} />
+          <StatePanel agentState={chatService().agentState()} />
         </div>
       </div>
     </ThemeProvider>
