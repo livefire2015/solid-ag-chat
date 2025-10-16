@@ -61,14 +61,14 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
     let assistantMessageStarted = false;
 
     try {
-      // Send full conversation history (all messages including the new one)
-      const allMessages = [...messages(), userMessage];
+      // Send full conversation history (userMessage already included in messages())
+      const allMessages = messages();
       const request: AGUIRequest = {
         threadId: threadId(), // Persistent thread ID for conversation
         runId: crypto.randomUUID(), // New run ID for each message
         state: null,
         messages: allMessages.map(msg => ({
-          id: crypto.randomUUID(), // Generate unique ID for each message
+          id: msg.id, // Preserve existing message ID
           role: msg.role,
           content: msg.content,
         })),
