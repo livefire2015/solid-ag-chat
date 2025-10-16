@@ -5,6 +5,105 @@ SolidJS chat components for AG-UI protocol integration with PydanticAI.
 [![npm version](https://badge.fury.io/js/@livefire2015%2Fsolid-ag-chat.svg)](https://www.npmjs.com/package/@livefire2015/solid-ag-chat)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## ChatInterface Props Reference (v0.4.1+)
+
+### Core Props
+```tsx
+interface ChatInterfaceProps {
+  apiUrl?: string;           // Backward compatibility only
+  mode?: 'local' | 'remote' | 'controlled';
+  config?: Partial<ChatConfig>;
+  onEvents?: Partial<ChatEventHandlers>;
+}
+```
+
+### Config Object
+```tsx
+interface ChatConfig {
+  // API & Storage Configuration
+  apiConfig?: {
+    baseUrl: string;
+    headers?: Record<string, string>;
+    endpoints?: {
+      streamMessage?: string;                      // '/agent/stream'
+      getConversations?: string;                   // '/api/chat/conversations'
+      getConversation?: string;                    // '/api/chat/c/{conversationId}'
+      createConversation?: string;                 // '/api/chat/conversations'
+      createConversationWithMessage?: string;      // '/api/chat/conversations/with-message'
+      updateConversation?: string;                 // '/api/chat/c/{conversationId}'
+      deleteConversation?: string;                 // '/api/chat/c/{conversationId}'
+      generateTitle?: string;                      // '/api/chat/c/{conversationId}/generate-title'
+      getMessages?: string;                        // '/api/chat/c/{conversationId}/messages'
+      sendMessage?: string;                        // '/api/chat/c/{conversationId}/messages'
+    };
+  };
+
+  storageConfig?: ApiConfig; // Falls back to apiConfig if not provided
+
+  // Services (for dependency injection)
+  chatService?: ChatService;
+  storageAdapter?: StorageAdapter;
+
+  // Conversation behavior
+  conversationId?: string;
+  autoTitle?: boolean;
+  createOnFirstMessage?: boolean;
+
+  // UI Configuration
+  title?: string;
+  description?: string;
+  userName?: string;
+  suggestions?: SuggestionItem[];
+  showSidebar?: boolean;
+  disclaimerText?: string;
+
+  // Controlled mode data
+  conversations?: ConversationSummary[];
+  currentConversationId?: string;
+}
+```
+
+### Event Handlers
+```tsx
+interface ChatEventHandlers {
+  // Status monitoring
+  onStatusChange?: (status: ServiceStatus) => void;
+
+  // Navigation
+  onNewConversation?: () => void;
+
+  // Conversation lifecycle (for controlled mode)
+  onConversationCreate?: (data: Partial<Conversation>) => Promise<string>;
+  onConversationSelect?: (id: string) => void;
+  onConversationUpdate?: (id: string, updates: Partial<Conversation>) => Promise<void>;
+  onConversationDelete?: (id: string) => Promise<void>;
+}
+```
+
+### Supporting Types
+```tsx
+interface SuggestionItem {
+  id: string;
+  icon?: string;
+  category: string;
+  title: string;
+  description: string;
+}
+
+interface ServiceStatus {
+  loading: boolean;
+  error?: string;
+  lastUpdated?: string;
+  details?: Record<string, unknown>;
+}
+```
+
+### Usage Modes
+
+- **`local`**: Data stored in browser localStorage, no backend required
+- **`remote`**: Full backend integration with conversation persistence
+- **`controlled`**: External state management, you control all data operations
+
 ## Features
 
 - 🚀 Built with SolidJS for reactive, performant UI
