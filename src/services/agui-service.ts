@@ -82,9 +82,18 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
 
       // Build the streaming endpoint URL
       const streamEndpoint = apiConfig.endpoints?.streamMessage || '/agent/stream';
-      const streamUrl = conversationId && streamEndpoint.includes('{conversationId}')
-        ? buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint, { conversationId })
-        : buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint);
+
+      // If endpoint has conversationId placeholder, we need a conversationId
+      let streamUrl: string;
+      if (streamEndpoint.includes('{conversationId}')) {
+        const actualConversationId = conversationId || 'default';
+        streamUrl = buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint, {
+          conversationId: actualConversationId
+        });
+      } else {
+        // Endpoint doesn't need conversationId parameter
+        streamUrl = buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint);
+      }
 
       const response = await fetch(streamUrl, {
         method: 'POST',
