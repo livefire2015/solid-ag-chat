@@ -27,6 +27,7 @@ interface ChatInterfaceProps {
   disclaimerText?: string;
   loadConversationsOnMount?: boolean;
   showSidebar?: boolean;
+  onNewConversation?: () => void;
 }
 
 const ChatInterface: Component<ChatInterfaceProps> = (props) => {
@@ -156,6 +157,13 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   });
 
   const handleNewConversation = async () => {
+    // If external handler is provided, use it instead of internal logic
+    if (props.onNewConversation) {
+      props.onNewConversation();
+      return;
+    }
+
+    // Default behavior for backward compatibility
     const title = `Chat ${conversationStore.conversations().length + 1}`;
     const newConversationId = await conversationStore.createConversation(title);
     await conversationStore.loadConversation(newConversationId);
