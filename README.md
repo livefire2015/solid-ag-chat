@@ -192,6 +192,133 @@ function ChatPage() {
 }
 ```
 
+### With Dependency Injection (v0.4.0+)
+
+Inject pre-configured services for custom auth, retries, or caching:
+
+```tsx
+import { ChatInterface } from '@livefire2015/solid-ag-chat';
+import { createAGUIService } from '@livefire2015/solid-ag-chat';
+import { createRemoteStorageAdapter, StorageManager } from '@livefire2015/solid-ag-chat';
+
+function ProductionChatPage() {
+  // Create auth-aware chat service
+  const chatService = createAGUIService({
+    baseUrl: 'https://api.myapp.com',
+    headers: {
+      'Authorization': `Bearer ${getAuthToken()}`,
+      'X-App-Version': '1.0.0'
+    },
+    endpoints: {
+      streamMessage: '/chat/stream'
+    }
+  });
+
+  // Create persistent storage adapter with custom config
+  const storageAdapter = createRemoteStorageAdapter({
+    baseUrl: 'https://api.myapp.com',
+    headers: {
+      'Authorization': `Bearer ${getAuthToken()}`
+    },
+    endpoints: {
+      getConversations: '/conversations',
+      getConversation: '/conversations/{conversationId}',
+      createConversationWithMessage: '/conversations/create'
+    }
+  });
+
+  const storageManager = new StorageManager(storageAdapter);
+
+  return (
+    <ChatInterface
+      chatService={chatService}
+      storageManager={storageManager}
+      onStatusChange={(status) => {
+        if (status.error) {
+          showNotification(`Chat error: ${status.error}`);
+        }
+      }}
+    />
+  );
+}
+```
+
+### With Split API Configuration (v0.4.0+)
+
+Use different hosts for streaming vs CRUD operations:
+
+```tsx
+function MultiHostChatPage() {
+  return (
+    <ChatInterface
+      // Streaming chat goes to one service
+      chatApiConfig={{
+        baseUrl: 'https://chat-stream.myapp.com',
+        headers: { 'Authorization': `Bearer ${getChatToken()}` },
+        endpoints: {
+          streamMessage: '/v1/stream'
+        }
+      }}
+      // CRUD operations go to another service
+      storageApiConfig={{
+        baseUrl: 'https://api.myapp.com',
+        headers: { 'Authorization': `Bearer ${getApiToken()}` },
+        endpoints: {
+          getConversations: '/v2/conversations',
+          createConversationWithMessage: '/v2/conversations/create'
+        }
+      }}
+      storageMode="remote"
+    />
+  );
+}
+```
+
+### With Controlled Mode (v0.4.0+)
+
+Take full control over conversation state management:
+
+```tsx
+function ControlledChatPage() {
+  const [conversations, setConversations] = createSignal([]);
+  const [currentConversationId, setCurrentConversationId] = createSignal(null);
+
+  const handleConversationCreate = async (data) => {
+    const response = await fetch('/api/conversations', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    const newConversation = await response.json();
+
+    setConversations([newConversation, ...conversations()]);
+    setCurrentConversationId(newConversation.id);
+    navigate(`/chat/${newConversation.id}`);
+
+    return newConversation.id;
+  };
+
+  return (
+    <ChatInterface
+      controlled={true}
+      conversations={conversations()}
+      currentConversationId={currentConversationId()}
+      onConversationCreate={handleConversationCreate}
+      onConversationSelect={(id) => {
+        setCurrentConversationId(id);
+        navigate(`/chat/${id}`);
+      }}
+      onConversationUpdate={async (id, updates) => {
+        await fetch(`/api/conversations/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updates)
+        });
+        // Update local state...
+      }}
+    />
+  );
+}
+```
+
 ## Components
 
 ### ChatInterface
@@ -205,22 +332,57 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 ```
 
 **Props:**
-- `apiUrl` (optional, deprecated): The API endpoint for the AG-UI stream. Use `apiConfig` instead
-- `apiConfig` (optional): API configuration object with `baseUrl` and custom `endpoints`
+
+**Legacy Props (Backward Compatible):**
+- `apiUrl` (optional, deprecated): The API endpoint for the AG-UI stream. Use `chatApiConfig` instead
+- `apiConfig` (optional, deprecated): API configuration object. Use `chatApiConfig` and `storageApiConfig` instead
+
+**Core Configuration:**
 - `storageMode` (optional): Storage mode - `'local'` | `'remote'` | `'hybrid'`. Defaults to `'local'`
 - `conversationId` (optional): Specific conversation ID to load (useful for routing)
-- `newChatMode` (optional): Enable new chat mode for homepage (v0.3.1+). Defaults to `false`
-- `autoGenerateTitle` (optional): Automatically generate conversation titles after assistant response (v0.3.1+). Defaults to `true`
-- `createConversationOnFirstMessage` (optional): Create conversation on first message send (v0.3.1+). Defaults to `false`
+- `newChatMode` (optional): Enable new chat mode for homepage. Defaults to `false`
+- `autoGenerateTitle` (optional): Automatically generate conversation titles after assistant response. Defaults to `true`
+- `createConversationOnFirstMessage` (optional): Create conversation on first message send. Defaults to `false`
+- `loadConversationsOnMount` (optional): Whether to load conversations on component mount. Defaults to `true`
+- `showSidebar` (optional): Whether to show the conversation sidebar. Defaults to `true`
+
+**UI Configuration:**
 - `title` (optional): Chat interface title. Defaults to `"Nova Chat"`
 - `description` (optional): Chat interface description. Defaults to `"Let language become the interface"`
-- `userName` (optional): User name displayed in empty state (v0.3.2+)
-- `suggestions` (optional): Array of suggestion items for empty state (v0.3.2+)
+- `userName` (optional): User name displayed in empty state
+- `suggestions` (optional): Array of suggestion items for empty state
 - `showEmptyState` (optional): Whether to show empty state with suggestions. Defaults to `true`
-- `disclaimerText` (optional): Custom disclaimer text in footer (v0.3.2+)
-- `loadConversationsOnMount` (optional): Whether to load conversations on component mount. Defaults to `true` (v0.3.5+)
-- `showSidebar` (optional): Whether to show the conversation sidebar. Defaults to `true` (v0.3.5+)
-- `onNewConversation` (optional): Custom handler for new conversation creation, useful for routing without API calls (v0.3.7+)
+- `disclaimerText` (optional): Custom disclaimer text in footer
+
+**Event Handlers:**
+- `onNewConversation` (optional): Custom handler for new conversation creation
+
+**Dependency Injection (v0.4.0+):**
+- `chatService` (optional): Pre-configured chat service with custom auth/headers
+- `storageManager` (optional): Pre-configured storage manager with custom adapter
+- `storageAdapter` (optional): Custom storage adapter implementation
+
+**Split API Configuration (v0.4.0+):**
+- `chatApiConfig` (optional): API config for streaming chat operations
+- `storageApiConfig` (optional): API config for CRUD conversation operations
+
+**Status Callbacks (v0.4.0+):**
+- `onStatusChange` (optional): Global status change callback for loading/error states
+- `onChatStatusChange` (optional): Chat-specific status change callback
+- `onStorageStatusChange` (optional): Storage-specific status change callback
+
+**Controlled Mode (v0.4.0+):**
+- `controlled` (optional): Explicitly enable controlled mode
+- `conversations` (optional): External conversation list (enables controlled mode)
+- `currentConversationId` (optional): External current conversation ID
+- `onConversationChange` (optional): Callback when conversation selection changes
+- `onConversationCreate` (optional): Callback for creating new conversations
+- `onConversationUpdate` (optional): Callback for updating conversations
+- `onConversationDelete` (optional): Callback for deleting conversations
+- `onConversationSelect` (optional): Callback for selecting conversations
+- `onConversationDuplicate` (optional): Callback for duplicating conversations
+- `onConversationArchive` (optional): Callback for archiving conversations
+- `onConversationStar` (optional): Callback for starring conversations
 
 ### MessageList
 
@@ -468,7 +630,19 @@ npm run dev
 
 ## Changelog
 
-### v0.3.7 (Latest)
+### v0.4.0 (Latest) - Major Architecture Refactor 🚀
+**Breaking Changes & Major Improvements:**
+- 🏗️ **Dependency Injection**: Inject pre-configured `chatService`, `storageManager`, `storageAdapter`
+- 🔄 **Memoized Storage**: Fixed cache-wiping issue in remote storage adapters
+- 🎛️ **Controlled Mode**: Full external control over conversation lifecycle
+- 📡 **Split API Configs**: Separate `chatApiConfig` and `storageApiConfig` for different concerns
+- 📊 **Enhanced Loading States**: Proper loading propagation to all UI components
+- 🔔 **Status Callbacks**: `onStatusChange`, `onChatStatusChange`, `onStorageStatusChange`
+- 🧭 **Production Ready**: Designed for real-world remote API integrations
+
+**Migration Guide:** See [v0.4.0 Migration](#v040-migration-guide) below.
+
+### v0.3.7
 - ✨ Added onNewConversation prop for custom new conversation handling
 - 🧭 Enables pure frontend navigation without API calls for new chat creation
 - 🔄 Maintains backward compatibility with default conversation creation behavior
@@ -515,6 +689,116 @@ npm run dev
 - Initial release with core chat functionality
 - AG-UI protocol implementation
 - Local storage support
+
+## v0.4.0 Migration Guide
+
+### Breaking Changes
+
+**1. Storage Adapter Behavior**
+- Storage adapters are now memoized and persistent across component lifecycle
+- Fixes cache-wiping issues that caused duplicate API calls
+- **Action Required**: None for basic usage, but performance will improve
+
+**2. Enhanced Loading States**
+- Loading states now properly propagate to all UI components
+- **Action Required**: Update any custom loading indicators to use new status callbacks
+
+### New Features You Should Adopt
+
+**1. Split API Configuration (Recommended)**
+```tsx
+// Before (v0.3.x)
+<ChatInterface
+  apiConfig={{
+    baseUrl: 'http://localhost:3001',
+    endpoints: {
+      streamMessage: '/chat/stream',
+      getConversations: '/conversations'
+    }
+  }}
+/>
+
+// After (v0.4.0) - Better separation of concerns
+<ChatInterface
+  chatApiConfig={{
+    baseUrl: 'https://chat-api.myapp.com',
+    endpoints: { streamMessage: '/v1/stream' }
+  }}
+  storageApiConfig={{
+    baseUrl: 'https://api.myapp.com',
+    endpoints: { getConversations: '/v2/conversations' }
+  }}
+/>
+```
+
+**2. Dependency Injection for Production Apps**
+```tsx
+// Before (v0.3.x) - No control over service creation
+<ChatInterface apiConfig={config} />
+
+// After (v0.4.0) - Full control with auth, retries, etc.
+const chatService = createAGUIService({
+  ...config,
+  headers: { 'Authorization': `Bearer ${token}` },
+  timeout: 30000
+});
+
+<ChatInterface chatService={chatService} />
+```
+
+**3. Controlled Mode for Complex Apps**
+```tsx
+// Before (v0.3.x) - Limited external control
+<ChatInterface
+  onNewConversation={() => navigate('/chat')}
+/>
+
+// After (v0.4.0) - Full external control
+<ChatInterface
+  controlled={true}
+  conversations={myConversations}
+  currentConversationId={currentId}
+  onConversationCreate={handleCreate}
+  onConversationSelect={handleSelect}
+/>
+```
+
+**4. Status Callbacks for Better UX**
+```tsx
+// New in v0.4.0 - Monitor loading/error states
+<ChatInterface
+  onStatusChange={(status) => {
+    if (status.loading) showGlobalSpinner();
+    if (status.error) showErrorToast(status.error);
+  }}
+  onChatStatusChange={(status) => {
+    // Handle chat-specific status
+  }}
+  onStorageStatusChange={(status) => {
+    // Handle storage-specific status
+  }}
+/>
+```
+
+### Backward Compatibility
+
+All v0.3.x code continues to work in v0.4.0 with these deprecation warnings:
+- `apiUrl` prop → Use `chatApiConfig` instead
+- `apiConfig` prop → Use `chatApiConfig` and `storageApiConfig` instead
+
+### Performance Improvements
+
+**Before v0.4.0 Issues:**
+- Remote storage adapters recreated on every call (cache loss)
+- Loading states not properly propagated
+- No way to inject auth-aware services
+
+**After v0.4.0 Benefits:**
+- ✅ Persistent adapters preserve caches
+- ✅ Proper loading state propagation
+- ✅ Full service dependency injection
+- ✅ Split concerns for streaming vs CRUD
+- ✅ Production-ready architecture
 
 ## License
 
