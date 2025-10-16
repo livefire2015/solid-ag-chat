@@ -65,6 +65,19 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
   const shouldAutoLoad = props.loadConversationsOnMount !== false && !props.newChatMode && !props.createConversationOnFirstMessage;
   const conversationStore = createConversationStore(storageManager, shouldAutoLoad);
   const [showConversations, setShowConversations] = createSignal(false);
+  const [conversationsLoaded, setConversationsLoaded] = createSignal(shouldAutoLoad);
+
+  // Lazy load conversations when sidebar is opened for the first time
+  const handleToggleConversations = async () => {
+    const newState = !showConversations();
+    setShowConversations(newState);
+
+    // Load conversations on first open if not already loaded
+    if (newState && !conversationsLoaded()) {
+      await conversationStore.loadConversations();
+      setConversationsLoaded(true);
+    }
+  };
 
   // Only access conversations when sidebar should be shown
   const sidebarConversations = createMemo(() => {
@@ -265,7 +278,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-4">
                 <button
-                  onClick={() => setShowConversations(!showConversations())}
+                  onClick={handleToggleConversations}
                   class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   aria-label="Toggle conversations"
                 >
