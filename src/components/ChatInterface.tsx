@@ -25,6 +25,8 @@ interface ChatInterfaceProps {
   suggestions?: import('../services/types').SuggestionItem[];
   showEmptyState?: boolean;
   disclaimerText?: string;
+  loadConversationsOnMount?: boolean;
+  showSidebar?: boolean;
 }
 
 const ChatInterface: Component<ChatInterfaceProps> = (props) => {
@@ -58,7 +60,9 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
 
   const chatService = createAGUIService(apiConfig);
   const storageManager = new StorageManager(createStorageAdapter());
-  const conversationStore = createConversationStore(storageManager);
+  // Only auto-load conversations if not in new chat mode and loadConversationsOnMount is not false
+  const shouldAutoLoad = props.loadConversationsOnMount !== false && !props.newChatMode && !props.createConversationOnFirstMessage;
+  const conversationStore = createConversationStore(storageManager, shouldAutoLoad);
   const [showConversations, setShowConversations] = createSignal(false);
 
   // Reference to MessageInput for programmatic control
@@ -106,6 +110,9 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
       chatService.setAutoTitleCallback(handleAutoTitleGeneration);
     }
 
+    // Only load conversations if explicitly requested (defaults to true for backward compatibility)
+    const shouldLoadConversations = props.loadConversationsOnMount !== false;
+
     if (props.conversationId) {
       // Load specific conversation from URL
       await conversationStore.loadConversation(props.conversationId);
@@ -121,7 +128,9 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
     } else if (props.newChatMode || props.createConversationOnFirstMessage) {
       // New chat mode - don't create conversation yet, wait for first message
       console.log('New chat mode - conversation will be created on first message');
-    } else {
+      // Skip loading conversations list for new chat mode unless explicitly requested
+      return;
+    } else if (shouldLoadConversations) {
       // Traditional mode - create default conversation if none exist
       if (conversationStore.conversations().length === 0) {
         const newConversationId = await conversationStore.createConversation('Welcome Chat');
@@ -212,7 +221,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
     <ThemeProvider>
       <div class="flex h-screen bg-white">
         {/* Sidebar */}
-        <Show when={showConversations()}>
+        <Show when={showConversations() && props.showSidebar !== false}>
           <div class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
             <ConversationList
               conversations={conversationStore.conversations()}
