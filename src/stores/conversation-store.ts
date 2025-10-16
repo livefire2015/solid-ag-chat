@@ -140,13 +140,13 @@ export function createConversationStore(storageManager: StorageManager, autoLoad
       setIsLoading(true);
       setError(null);
 
-      const conversationId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const conversationId = crypto.randomUUID();
       const now = new Date().toISOString();
 
       const messages: EnhancedAGUIMessage[] = [];
 
       if (initialMessage) {
-        const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const messageId = crypto.randomUUID();
         messages.push({
           id: messageId,
           conversationId,
@@ -264,13 +264,13 @@ export function createConversationStore(storageManager: StorageManager, autoLoad
         throw new Error('Conversation not found');
       }
 
-      const newConversationId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newConversationId = crypto.randomUUID();
       const now = new Date().toISOString();
 
       // Create new messages with new IDs
       const newMessages: EnhancedAGUIMessage[] = conversation.messages.map((msg: EnhancedAGUIMessage) => ({
         ...msg,
-        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: crypto.randomUUID(),
         conversationId: newConversationId
       }));
 
@@ -301,7 +301,7 @@ export function createConversationStore(storageManager: StorageManager, autoLoad
     const current = currentConversation();
     if (!current) return;
 
-    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const messageId = crypto.randomUUID();
     const newMessage: EnhancedAGUIMessage = {
       ...message,
       id: messageId,
