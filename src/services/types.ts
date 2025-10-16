@@ -1,275 +1,101 @@
-// AG-UI Protocol Event Types
-export const AG_UI_EVENT_TYPES = [
-  'RUN_STARTED',
-  'RUN_FINISHED',
-  'TEXT_MESSAGE_START',
-  'TEXT_MESSAGE_CONTENT',
-  'TEXT_MESSAGE_END',
-  'TEXT_MESSAGE_DELTA',
-  'TOOL_CALL_START',
-  'TOOL_CALL_ARGS',
-  'TOOL_CALL_END',
-  'TOOL_CALL_RESULT',
-  'TOOL_CALL_DELTA',
-  'TOOL_OUTPUT',
-  'STATE_SNAPSHOT',
-  'STATE_DELTA',
-  'ERROR',
-  'AGENT_PROPOSAL',
-  'AGENT_PROPOSAL_APPROVED',
-  'AGENT_PROPOSAL_REJECTED',
-  'HUMAN_INPUT_REQUIRED',
-  'CONTEXT_UPDATE',
-] as const;
+// Import official AG-UI types and compatibility layer
+import {
+  EventType,
+  AG_UI_EVENT_TYPES,
+  AGUIMessage,
+  AGUIToolCall,
+  AGUIRequest,
+  AgentState,
+  EnhancedAGUIMessage,
+  StreamingToolCall,
+  FileAttachment,
+  FileAttachmentStatus,
+  // Event interfaces
+  BaseEvent,
+  TextMessageStartEvent,
+  TextMessageContentEvent,
+  TextMessageEndEvent,
+  TextMessageDeltaEvent,
+  ToolCallStartEvent,
+  ToolCallArgsEvent,
+  ToolCallEndEvent,
+  ToolCallResultEvent,
+  ToolCallDeltaEvent,
+  ToolOutputEvent,
+  RunStartedEvent,
+  RunFinishedEvent,
+  StateSnapshotEvent,
+  StateDeltaEvent,
+  ErrorEvent,
+  AgentProposal,
+  AgentProposalEvent,
+  AgentProposalApprovedEvent,
+  AgentProposalRejectedEvent,
+  HumanInputRequiredEvent,
+  ContextUpdateEvent,
+  AGUIEvent,
+  // EventSchemas for validation
+  EventSchemas
+} from './types/ag-ui-compat';
 
-export type EventType = typeof AG_UI_EVENT_TYPES[number];
+// Re-export for backward compatibility
+export {
+  EventType,
+  AG_UI_EVENT_TYPES,
+  EventSchemas
+};
+export type {
+  AGUIMessage,
+  AGUIToolCall,
+  AGUIRequest,
+  AgentState,
+  EnhancedAGUIMessage,
+  StreamingToolCall,
+  FileAttachment,
+  FileAttachmentStatus,
+  // Event interfaces
+  BaseEvent,
+  TextMessageStartEvent,
+  TextMessageContentEvent,
+  TextMessageEndEvent,
+  TextMessageDeltaEvent,
+  ToolCallStartEvent,
+  ToolCallArgsEvent,
+  ToolCallEndEvent,
+  ToolCallResultEvent,
+  ToolCallDeltaEvent,
+  ToolOutputEvent,
+  RunStartedEvent,
+  RunFinishedEvent,
+  StateSnapshotEvent,
+  StateDeltaEvent,
+  ErrorEvent,
+  AgentProposal,
+  AgentProposalEvent,
+  AgentProposalApprovedEvent,
+  AgentProposalRejectedEvent,
+  HumanInputRequiredEvent,
+  ContextUpdateEvent,
+  AGUIEvent
+};
 
-// Message Types
-export interface AGUIMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp?: string;
-  toolCalls?: AGUIToolCall[];
-}
+// All event interfaces are now imported from ag-ui-compat.ts
+// This provides compatibility with @ag-ui/core while maintaining backward compatibility
 
-export interface AGUIToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-  result?: unknown;
-}
+// The following types are now imported from the compatibility layer.
+// We don't need to redefine them here since they're properly exported from ag-ui-compat.ts
 
-// Enhanced Tool Call with streaming state
-export interface StreamingToolCall {
-  id: string;
-  name: string;
-  arguments: string; // Raw arguments as they stream in
-  parsedArguments?: Record<string, unknown>; // Parsed when complete
-  result?: string;
-  status: 'starting' | 'building_args' | 'executing' | 'completed' | 'error';
-  parentMessageId?: string;
-  startedAt: string;
-  completedAt?: string;
-  error?: string;
-}
-
-// Event Interfaces
-export interface TextMessageStartEvent {
-  type: 'TEXT_MESSAGE_START';
-  messageId: string;
-  role: 'assistant' | 'user' | 'system';
-}
-
-export interface TextMessageContentEvent {
-  type: 'TEXT_MESSAGE_CONTENT';
-  messageId: string;
-  delta: string;
-}
-
-export interface TextMessageEndEvent {
-  type: 'TEXT_MESSAGE_END';
-  messageId: string;
-}
-
-export interface TextMessageDeltaEvent {
-  type: 'TEXT_MESSAGE_DELTA';
-  delta: string;
-}
-
-// New Tool Call Events
-export interface ToolCallStartEvent {
-  type: 'TOOL_CALL_START';
-  toolCallId: string;
-  toolCallName: string;
-  parentMessageId?: string;
-}
-
-export interface ToolCallArgsEvent {
-  type: 'TOOL_CALL_ARGS';
-  toolCallId: string;
-  delta: string;
-}
-
-export interface ToolCallEndEvent {
-  type: 'TOOL_CALL_END';
-  toolCallId: string;
-}
-
-export interface ToolCallResultEvent {
-  type: 'TOOL_CALL_RESULT';
-  messageId: string;
-  toolCallId: string;
-  content: string;
-  role?: string;
-}
-
-// Legacy Tool Call Events (keeping for backward compatibility)
-export interface ToolCallDeltaEvent {
-  type: 'TOOL_CALL_DELTA';
-  toolCallId: string;
-  delta: Partial<AGUIToolCall>;
-}
-
-export interface ToolOutputEvent {
-  type: 'TOOL_OUTPUT';
-  toolCallId: string;
-  output: unknown;
-}
-
-export interface RunStartedEvent {
-  type: 'RUN_STARTED';
-  runId: string;
-  timestamp: string;
-}
-
-export interface RunFinishedEvent {
-  type: 'RUN_FINISHED';
-  runId: string;
-  timestamp: string;
-}
-
-export interface StateSnapshotEvent {
-  type: 'STATE_SNAPSHOT';
-  state: AgentState;
-}
-
-export interface StateDeltaEvent {
-  type: 'STATE_DELTA';
-  delta: Array<import('fast-json-patch').Operation>; // JSON Patch operations
-}
-
-export interface ErrorEvent {
-  type: 'ERROR';
-  error: string;
-  code?: string;
-}
-
-export interface AgentProposalEvent {
-  type: 'AGENT_PROPOSAL';
-  proposal: AgentProposal;
-}
-
-export interface AgentProposalApprovedEvent {
-  type: 'AGENT_PROPOSAL_APPROVED';
-  proposalId: string;
-}
-
-export interface AgentProposalRejectedEvent {
-  type: 'AGENT_PROPOSAL_REJECTED';
-  proposalId: string;
-  reason?: string;
-}
-
-export interface HumanInputRequiredEvent {
-  type: 'HUMAN_INPUT_REQUIRED';
-  prompt: string;
-  inputId: string;
-}
-
-export interface ContextUpdateEvent {
-  type: 'CONTEXT_UPDATE';
-  context: Record<string, unknown>;
-}
-
-// Union type for all events
-export type AGUIEvent =
-  | TextMessageStartEvent
-  | TextMessageContentEvent
-  | TextMessageEndEvent
-  | TextMessageDeltaEvent
-  | ToolCallStartEvent
-  | ToolCallArgsEvent
-  | ToolCallEndEvent
-  | ToolCallResultEvent
-  | ToolCallDeltaEvent
-  | ToolOutputEvent
-  | RunStartedEvent
-  | RunFinishedEvent
-  | StateSnapshotEvent
-  | StateDeltaEvent
-  | ErrorEvent
-  | AgentProposalEvent
-  | AgentProposalApprovedEvent
-  | AgentProposalRejectedEvent
-  | HumanInputRequiredEvent
-  | ContextUpdateEvent;
-
-// Agent State Types
-export interface AgentState {
-  [key: string]: any; // Support arbitrary state structure
-  // Common fields that might be used:
-  currentThought?: string;
-  workingMemory?: Record<string, unknown>;
-  reasoningChain?: string[];
-  nextActions?: string[];
-  progress?: number;
-  version?: string;
-  lastUpdated?: string;
-}
-
-export interface AgentProposal {
-  id: string;
-  title: string;
-  description: string;
-  impact: 'low' | 'medium' | 'high';
-  requiresApproval: boolean;
-  timestamp: string;
-}
-
-// Stream Event Type
+// Stream Event Type (not part of AG-UI core, solid-ag-chat specific)
 export interface StreamEvent {
   event: string;
   data: string;
 }
 
-// Request Types
-export interface AGUIRequest {
-  threadId: string;
-  runId: string;
-  state: any;
-  messages: Array<{
-    id: string;
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-  }>;
-  tools: Array<any>;
-  context: Array<any>;
-  forwardedProps: any;
-}
-
-// Tool Definition
+// Tool Definition (legacy, use Tool from ag-ui-compat instead)
 export interface AGUITool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-}
-
-// File Attachment Types
-export interface FileAttachment {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  url?: string;
-  data?: string | ArrayBuffer;
-  uploadProgress?: number;
-  uploaded: boolean;
-  error?: string;
-  preview?: string;
-}
-
-export type FileAttachmentStatus = 'pending' | 'uploading' | 'uploaded' | 'error';
-
-// Enhanced Message Types
-export interface EnhancedAGUIMessage extends AGUIMessage {
-  id: string;
-  conversationId: string;
-  attachments?: FileAttachment[];
-  isMarkdown?: boolean;
-  isEdited?: boolean;
-  editedAt?: string;
-  metadata?: Record<string, unknown>;
-  streamingToolCalls?: StreamingToolCall[];
 }
 
 export type MessageAction = 'copy' | 'edit' | 'delete' | 'retry' | 'react';
@@ -414,6 +240,89 @@ export interface UIState {
   loading: boolean;
   error: string | null;
 }
+
+// Service Status Types (v0.4.0+)
+export interface ServiceStatus {
+  loading: boolean;
+  error?: string;
+  lastUpdated?: string;
+  details?: Record<string, unknown>;
+}
+
+export type StatusChangeCallback = (status: ServiceStatus) => void;
+
+// Chat Service Types (v0.4.0+)
+export interface ChatService {
+  messages: () => EnhancedAGUIMessage[];
+  isLoading: () => boolean;
+  error: () => string | null;
+  agentState: () => AgentState | null;
+  sendMessage: (content: string, files?: any[], conversationId?: string) => Promise<void>;
+  loadMessages: (messages: EnhancedAGUIMessage[]) => void;
+  clearMessages: () => void;
+  clearAgentState: () => void;
+  setAutoTitleCallback?: (callback: (conversationId: string) => Promise<void>) => void;
+}
+
+export interface ChatServiceConfig {
+  apiConfig: import('./types/api').ApiConfig;
+  onAutoTitle?: (conversationId: string) => Promise<void>;
+  onStatusChange?: StatusChangeCallback;
+}
+
+// Note: StorageManager is a class imported from '../services/storage'
+// No interface needed here since we use the actual class
+
+export interface StorageManagerConfig {
+  adapter: StorageAdapter;
+  onStatusChange?: StatusChangeCallback;
+}
+
+// Simplified Chat Configuration (v0.4.1+)
+export interface ChatConfig {
+  // API & Storage
+  apiConfig?: import('./types/api').ApiConfig;
+  storageConfig?: import('./types/api').ApiConfig; // Falls back to apiConfig if not provided
+
+  // Services (for dependency injection)
+  chatService?: ChatService;
+  storageAdapter?: StorageAdapter;
+
+  // Conversation behavior
+  conversationId?: string;
+  autoTitle?: boolean;
+  createOnFirstMessage?: boolean;
+
+  // UI
+  title?: string;
+  description?: string;
+  userName?: string;
+  suggestions?: SuggestionItem[];
+  showSidebar?: boolean;
+  disclaimerText?: string;
+
+  // Controlled mode data
+  conversations?: ConversationSummary[];
+  currentConversationId?: string;
+}
+
+// Simplified Event Handlers (v0.4.1+)
+export interface ChatEventHandlers {
+  // Status
+  onStatusChange?: (status: ServiceStatus) => void;
+
+  // Navigation
+  onNewConversation?: () => void;
+
+  // Conversation lifecycle (for controlled mode)
+  onConversationCreate?: (data: Partial<Conversation>) => Promise<string>;
+  onConversationSelect?: (id: string) => void;
+  onConversationUpdate?: (id: string, updates: Partial<Conversation>) => Promise<void>;
+  onConversationDelete?: (id: string) => Promise<void>;
+}
+
+// Chat Mode Types (v0.4.1+)
+export type ChatMode = 'local' | 'remote' | 'controlled';
 
 // Export API types
 export * from './types/api';

@@ -7,8 +7,14 @@ import type {
   AgentState,
   AGUIRequest,
   StreamingToolCall,
-  ApiConfig,
+  ApiConfig
 } from './types';
+import { EventSchemas } from './types';
+import {
+  convertToOfficialMessage,
+  convertFromOfficialMessage,
+  convertToOfficialRunInput
+} from './types/ag-ui-compat';
 import { buildEndpointUrl } from './types/api';
 
 export interface ChatService {
@@ -63,25 +69,31 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
     try {
       // Send full conversation history (all messages including the new one)
       const allMessages = [...messages(), userMessage];
-      const request: AGUIRequest = {
+
+      // Use official AG-UI conversion function for compatibility
+      const request: AGUIRequest = convertToOfficialRunInput(allMessages, {
         threadId: threadId(), // Persistent thread ID for conversation
         runId: crypto.randomUUID(), // New run ID for each message
         state: null,
-        messages: allMessages.map(msg => ({
-          id: crypto.randomUUID(), // Generate unique ID for each message
-          role: msg.role,
-          content: msg.content,
-        })),
         tools: [],
         context: [],
         forwardedProps: null,
-      };
+      });
 
       // Build the streaming endpoint URL
       const streamEndpoint = apiConfig.endpoints?.streamMessage || '/agent/stream';
-      const streamUrl = conversationId && streamEndpoint.includes('{conversationId}')
-        ? buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint, { conversationId })
-        : buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint);
+
+      // If endpoint has conversationId placeholder, we need a conversationId
+      let streamUrl: string;
+      if (streamEndpoint.includes('{conversationId}')) {
+        const actualConversationId = conversationId || 'default';
+        streamUrl = buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint, {
+          conversationId: actualConversationId
+        });
+      } else {
+        // Endpoint doesn't need conversationId parameter
+        streamUrl = buildEndpointUrl(apiConfig.baseUrl || '', streamEndpoint);
+      }
 
       const response = await fetch(streamUrl, {
         method: 'POST',
@@ -117,7 +129,23 @@ export function createAGUIService(apiConfigOrUrl?: string | ApiConfig): ChatServ
             const data = line.slice(6); // Remove 'data: ' prefix
             if (data === '[DONE]') continue;
 
-            const event: AGUIEvent = JSON.parse(data);
+            const rawEvent = JSON.parse(data);
+
+            // Validate event using AG-UI core schemas (if available)
+            let event: AGUIEvent;
+            try {
+              if (EventSchemas && typeof EventSchemas === 'object' && 'parse' in EventSchemas) {
+                // Use official AG-UI validation
+                event = (EventSchemas as any).parse(rawEvent);
+              } else {
+                // Fallback to basic type assertion
+                event = rawEvent as AGUIEvent;
+              }
+            } catch (validationError) {
+              console.warn('Event validation failed:', validationError, 'Raw event:', rawEvent);
+              // Use raw event but log the validation failure
+              event = rawEvent as AGUIEvent;
+            }
 
             // Handle different event types
             switch (event.type) {
