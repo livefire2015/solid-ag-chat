@@ -116,6 +116,28 @@ function ChatPage() {
 }
 ```
 
+### New Chat Mode (v0.3.5+)
+
+For new chat interfaces that don't need to load existing conversations:
+
+```tsx
+import { ChatInterface } from '@livefire2015/solid-ag-chat';
+
+function NewChatPage() {
+  return (
+    <ChatInterface
+      newChatMode={true}
+      loadConversationsOnMount={false}
+      showSidebar={false}
+      createConversationOnFirstMessage={true}
+      storageMode="local"
+      suggestions={suggestions}
+      showEmptyState={true}
+    />
+  );
+}
+```
+
 ### With Routing
 
 Using SolidJS Router to handle conversation URLs:
@@ -168,6 +190,8 @@ import { ChatInterface } from '@livefire2015/solid-ag-chat';
 - `suggestions` (optional): Array of suggestion items for empty state (v0.3.2+)
 - `showEmptyState` (optional): Whether to show empty state with suggestions. Defaults to `true`
 - `disclaimerText` (optional): Custom disclaimer text in footer (v0.3.2+)
+- `loadConversationsOnMount` (optional): Whether to load conversations on component mount. Defaults to `true` (v0.3.5+)
+- `showSidebar` (optional): Whether to show the conversation sidebar. Defaults to `true` (v0.3.5+)
 
 ### MessageList
 
@@ -415,7 +439,18 @@ npm run dev
 
 ## Changelog
 
-### v0.3.3 (Latest)
+### v0.3.5 (Latest)
+- 🚫 Fixed loadConversationsOnMount prop to prevent unnecessary API calls in new chat mode
+- 🎛️ Added showSidebar prop to control conversation sidebar visibility
+- 🔧 Improved new chat flow with zero API calls until first message
+- 📝 Added documentation for new chat mode usage patterns
+
+### v0.3.4
+- 🔧 Fixed remote storage conversation creation and list refresh issues
+- 📝 Resolved PATCH request errors for new conversations
+- 🔄 Added proper conversation list refresh after creation
+
+### v0.3.3
 - 🔧 Fixed apiUrl prop to handle complete endpoint URIs correctly
 - 📝 Improved backwards compatibility documentation
 
