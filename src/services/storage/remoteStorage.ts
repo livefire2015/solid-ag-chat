@@ -5,6 +5,7 @@ import { buildEndpointUrl, DEFAULT_ENDPOINTS } from '../types/api';
 export class RemoteStorageAdapter implements StorageAdapter {
   private apiConfig: ApiConfig;
   private endpoints: ApiEndpoints;
+  private existingConversationIds: Set<string> = new Set();
 
   constructor(apiConfig: ApiConfig) {
     this.apiConfig = apiConfig;
@@ -130,7 +131,10 @@ export class RemoteStorageAdapter implements StorageAdapter {
         this.endpoints.getConversations,
         { method: 'GET' }
       );
-      return response.conversations || [];
+      const conversations = response.conversations || [];
+      // Track existing conversation IDs for later use
+      conversations.forEach(conv => this.existingConversationIds.add(conv.id));
+      return conversations;
     } catch (error) {
       console.error('Error fetching conversations:', error);
       return [];
@@ -149,6 +153,9 @@ export class RemoteStorageAdapter implements StorageAdapter {
         { method: 'GET' },
         { conversationId }
       );
+      if (response.conversation) {
+        this.existingConversationIds.add(conversationId);
+      }
       return response.conversation || null;
     } catch (error) {
       console.error('Error fetching conversation:', error);
@@ -330,6 +337,58 @@ export class RemoteStorageAdapter implements StorageAdapter {
     // Return the streaming endpoint URL with conversationId
     const baseUrl = this.apiConfig.baseUrl || '';
     return buildEndpointUrl(baseUrl, this.endpoints.streamMessage, { conversationId });
+  }
+
+  // Save conversation - determines whether to create or update
+  async saveConversation(conversation: Conversation): Promise<void> {
+    // Check if this conversation already exists
+    const isExisting = this.existingConversationIds.has(conversation.id);
+
+    if (!isExisting) {
+      // New conversation - use createConversation endpoint
+      if (this.endpoints.createConversation) {
+        try {
+          await this.fetchApi<{ conversation: Conversation }>(
+            this.endpoints.createConversation,
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                id: conversation.id,
+                title: conversation.title,
+                description: conversation.description,
+                messages: conversation.messages,
+                createdAt: conversation.createdAt,
+                updatedAt: conversation.updatedAt,
+                tags: conversation.tags,
+                archived: conversation.archived,
+                starred: conversation.starred
+              })
+            }
+          );
+          this.existingConversationIds.add(conversation.id);
+        } catch (error) {
+          console.error('Error creating conversation:', error);
+          throw error;
+        }
+      }
+    } else {
+      // Existing conversation - use updateConversation endpoint
+      if (this.endpoints.updateConversation) {
+        try {
+          await this.fetchApi(
+            this.endpoints.updateConversation,
+            {
+              method: 'PATCH',
+              body: JSON.stringify(conversation)
+            },
+            { conversationId: conversation.id }
+          );
+        } catch (error) {
+          console.error('Error updating conversation:', error);
+          throw error;
+        }
+      }
+    }
   }
 }
 

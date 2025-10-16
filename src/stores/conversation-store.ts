@@ -22,6 +22,7 @@ export interface ConversationStore {
   // Actions
   createConversation: (title?: string, initialMessage?: string) => Promise<string>;
   loadConversation: (conversationId: string) => Promise<void>;
+  loadConversations: () => Promise<void>;
   updateConversation: (conversationId: string, updates: Partial<Conversation>) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
   duplicateConversation: (conversationId: string) => Promise<string>;
@@ -501,6 +502,7 @@ export function createConversationStore(storageManager: StorageManager): Convers
     // Actions
     createConversation,
     loadConversation,
+    loadConversations,
     updateConversation,
     deleteConversation,
     duplicateConversation,

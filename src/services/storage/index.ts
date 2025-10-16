@@ -70,6 +70,14 @@ export class StorageManager {
 
   // Conversation management
   async saveConversation(conversation: any): Promise<void> {
+    // Check if adapter is RemoteStorageAdapter
+    if ('saveConversation' in this.adapter && typeof this.adapter.saveConversation === 'function') {
+      // Use remote storage adapter's saveConversation method
+      await (this.adapter as any).saveConversation(conversation);
+      return;
+    }
+
+    // Local storage approach
     const conversationKey = `conversation:${conversation.id}`;
     const summaryKey = `conversation-summary:${conversation.id}`;
 
@@ -93,6 +101,11 @@ export class StorageManager {
   }
 
   async getConversation(conversationId: string): Promise<any | null> {
+    // Check if adapter is RemoteStorageAdapter with getConversation method
+    if ('getConversation' in this.adapter && typeof this.adapter.getConversation === 'function') {
+      return await (this.adapter as any).getConversation(conversationId);
+    }
+    // Local storage approach
     return await this.adapter.get(`conversation:${conversationId}`);
   }
 
@@ -101,6 +114,16 @@ export class StorageManager {
   }
 
   async getAllConversationSummaries(): Promise<ConversationSummary[]> {
+    // Check if adapter is RemoteStorageAdapter and has getConversations method
+    if ('getConversations' in this.adapter && typeof this.adapter.getConversations === 'function') {
+      // Use remote API to get conversations
+      const conversations = await (this.adapter as any).getConversations();
+      return conversations.sort((a: ConversationSummary, b: ConversationSummary) =>
+        new Date(b.lastMessageAt || b.createdAt).getTime() - new Date(a.lastMessageAt || a.createdAt).getTime()
+      );
+    }
+
+    // Fallback to local storage approach
     const keys = await this.adapter.keys();
     const summaryKeys = keys.filter(key => key.startsWith('conversation-summary:'));
 

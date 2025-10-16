@@ -142,6 +142,7 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
     const title = `Chat ${conversationStore.conversations().length + 1}`;
     const newConversationId = await conversationStore.createConversation(title);
     await conversationStore.loadConversation(newConversationId);
+    await conversationStore.loadConversations(); // Refresh list for remote storage
     chatService.clearMessages();
   };
 
@@ -182,6 +183,8 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
         if (conversationId) {
           await conversationStore.loadConversation(conversationId);
           currentConv = conversationStore.currentConversation();
+          // Refresh conversation list for remote storage
+          await conversationStore.loadConversations();
         }
       } catch (error) {
         console.error('Failed to create conversation:', error);
