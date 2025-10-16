@@ -200,30 +200,13 @@ const ChatInterface: Component<ChatInterfaceProps> = (props) => {
     // Lazy conversation creation for new chat mode
     if (!currentConv && (props.newChatMode || props.createConversationOnFirstMessage)) {
       try {
-        if (props.storageMode === 'remote') {
-          // Use createConversationWithMessage for remote storage
-          const storageAdapter = createStorageAdapter();
-          if ('createConversationWithMessage' in storageAdapter) {
-            conversationId = await (storageAdapter as any).createConversationWithMessage(
-              'New Chat',
-              content,
-              files
-            );
-          } else {
-            // Fallback to regular creation
-            conversationId = await conversationStore.createConversation('New Chat');
-          }
-        } else {
-          // For local storage, create conversation normally
-          conversationId = await conversationStore.createConversation('New Chat');
-        }
+        // Create empty conversation first
+        // Let chatService.sendMessage handle sending the message via AG-UI endpoint
+        conversationId = await conversationStore.createConversation('New Chat');
 
-        if (conversationId) {
-          await conversationStore.loadConversation(conversationId);
-          currentConv = conversationStore.currentConversation();
-          // Refresh conversation list for remote storage
-          await conversationStore.loadConversations();
-        }
+        // Don't load conversation - we only need the ID for sending message
+        // The AG-UI endpoint will handle everything with the conversation ID
+        // After message is sent, the conversation list can be refreshed if needed
       } catch (error) {
         console.error('Failed to create conversation:', error);
         return;
