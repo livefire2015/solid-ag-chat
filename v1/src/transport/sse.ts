@@ -18,13 +18,7 @@ export interface SseAgClientOptions {
   // Optional: customize endpoint paths
   paths?: Partial<{
     events: string;
-    snapshot: string;
-    conversationCreate: string;
-    conversationSelect: string;
-    conversationArchive: string;
-    messageSend: string;
-    messageAbort: string;
-    attachmentRegister: string;
+    intents: string;
   }>;
 }
 
@@ -35,13 +29,7 @@ interface SseAgClientInternalOptions {
   tokenParam: string;
   paths: {
     events: string;
-    snapshot: string;
-    conversationCreate: string;
-    conversationSelect: string;
-    conversationArchive: string;
-    messageSend: string;
-    messageAbort: string;
-    attachmentRegister: string;
+    intents: string;
   };
 }
 
@@ -59,13 +47,7 @@ export class SseAgClient implements AgUiClient {
       sinceRevision: options.sinceRevision || '',
       paths: {
         events: options.paths?.events || '/events',
-        snapshot: options.paths?.snapshot || '/state/snapshot',
-        conversationCreate: options.paths?.conversationCreate || '/conversation/create',
-        conversationSelect: options.paths?.conversationSelect || '/conversation/select',
-        conversationArchive: options.paths?.conversationArchive || '/conversation/archive',
-        messageSend: options.paths?.messageSend || '/message/send',
-        messageAbort: options.paths?.messageAbort || '/message/abort',
-        attachmentRegister: options.paths?.attachmentRegister || '/attachment/register',
+        intents: options.paths?.intents || '/intents',
       },
     };
     this.connect();
@@ -84,42 +66,16 @@ export class SseAgClient implements AgUiClient {
   }
 
   async send<I extends IntentType>(type: I, payload: IntentPayloads[I]): Promise<void> {
-    const { baseUrl, paths } = this.opts;
-    const body = JSON.stringify({ ...payload, sessionId: this.opts.sessionId || undefined });
-    switch (type) {
-      case 'state.request_snapshot': {
-        const url = this.url(paths.snapshot);
-        const res = await fetch(url, { method: 'GET', credentials: 'include' });
-        if (!res.ok) throw new Error('snapshot failed');
-        const snap = (await res.json()) as StateSnapshot;
-        this.emit('state.snapshot', snap);
-        return;
-      }
-      case 'conversation.create': {
-        await this.post(paths.conversationCreate, body);
-        return;
-      }
-      case 'conversation.select': {
-        await this.post(paths.conversationSelect, body);
-        return;
-      }
-      case 'conversation.archive': {
-        await this.post(paths.conversationArchive, body);
-        return;
-      }
-      case 'message.send': {
-        await this.post(paths.messageSend, body);
-        return;
-      }
-      case 'message.abort': {
-        await this.post(paths.messageAbort, body);
-        return;
-      }
-      case 'attachment.register': {
-        await this.post(paths.attachmentRegister, body);
-        return;
-      }
-    }
+    const { paths } = this.opts;
+
+    // All intents go to /intents endpoint with intent type in body
+    const body = JSON.stringify({
+      intent: type,
+      sessionId: this.opts.sessionId || undefined,
+      ...payload
+    });
+
+    await this.post(paths.intents, body);
   }
 
   close(): void {
