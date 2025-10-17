@@ -1,7 +1,9 @@
 {
   "name": "@livefire2015/solid-ag-chat",
   "version": "0.3.8",
-  "description": "SolidJS chat components for AG-UI protocol integration with PydanticAI",
+  "description": "SolidJS chat components for AG-UI protocol integration with PydanticAI (DEPRECATED - use v1)",
+  "deprecated": "This version is deprecated. Use @livefire2015/solid-ag-chat v1 instead. See ../v1/ for the current implementation.",
+  "private": true,
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
