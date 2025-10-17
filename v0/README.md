@@ -1,3 +1,11 @@
+# ⚠️ DEPRECATED - @livefire2015/solid-ag-chat v0
+
+**This version is deprecated. Please use v1 instead.**
+
+See: `../v1/` for the current implementation.
+
+---
+
 # @livefire2015/solid-ag-chat
 
 SolidJS chat components for AG-UI protocol integration with PydanticAI.
