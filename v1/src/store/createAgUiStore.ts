@@ -42,51 +42,85 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   // Subscribe to all normalized events
   client.on('conversation.created', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'conversation.created', payload));
+    const c = (payload as any).conversation;
+    setState('conversations', c.id, c);
+    setState('activeConversationId', c.id);
   });
 
   client.on('conversation.updated', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'conversation.updated', payload));
+    const c = (payload as any).conversation;
+    setState('conversations', c.id, c);
   });
 
   client.on('conversation.archived', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'conversation.archived', payload));
+    const id = (payload as any).conversationId;
+    setState('conversations', id, 'status', 'archived');
   });
 
   client.on('message.created', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'message.created', payload));
+    const m = (payload as any).message;
+    setState('messages', m.id, m);
+    setState('messagesByConversation', m.conversationId, (arr = []) =>
+      arr.includes(m.id) ? arr : [...arr, m.id]
+    );
   });
 
   client.on('message.delta', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'message.delta', payload));
+    const { messageId, textDelta, partDelta } = payload as any;
+    if (textDelta) {
+      setState('streaming', messageId, (s = { text: '' }) => ({
+        text: s.text + textDelta
+      }));
+    }
+    if (partDelta) {
+      setState('messages', messageId, 'parts', (parts = []) => [...parts, partDelta]);
+    }
   });
 
   client.on('message.completed', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'message.completed', payload));
+    const { messageId, usage } = payload as any;
+    const streamingText = state.streaming[messageId]?.text;
+
+    if (streamingText) {
+      setState('messages', messageId, 'parts', (parts = []) =>
+        parts.length > 0 ? parts : [{ kind: 'text', text: streamingText } as any]
+      );
+      setState('streaming', messageId, undefined!);
+    }
+
+    setState('messages', messageId, 'status', 'completed');
+    if (usage) {
+      setState('messages', messageId, 'usage', usage);
+    }
   });
 
   client.on('message.errored', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'message.errored', payload));
+    const { messageId } = payload as any;
+    setState('messages', messageId, 'status', 'errored');
   });
 
   client.on('message.canceled', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'message.canceled', payload));
+    const { messageId } = payload as any;
+    setState('messages', messageId, 'status', 'canceled');
   });
 
   client.on('message.tool_call', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'message.tool_call', payload));
+    const { messageId, part } = payload as any;
+    setState('messages', messageId, 'parts', (parts = []) => [...parts, part]);
   });
 
   client.on('message.tool_result', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'message.tool_result', payload));
+    const { messageId, part } = payload as any;
+    setState('messages', messageId, 'parts', (parts = []) => [...parts, part]);
   });
 
   client.on('attachment.available', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'attachment.available', payload));
+    const { attachment } = payload as any;
+    setState('attachments', attachment.id, attachment);
   });
 
-  client.on('attachment.failed', (payload) => {
-    setState(s => applyNormalizedEvent(s, 'attachment.failed', payload));
+  client.on('attachment.failed', () => {
+    // Optionally track errors
   });
 
   return {
