@@ -78,16 +78,24 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   });
 
   client.on('message.completed', (payload) => {
-    const { messageId, usage } = payload as any;
-    const streamingText = state.streaming[messageId]?.text;
+    const { messageId, usage, parts } = payload as any;
 
-    if (streamingText) {
-      setState('messages', messageId, 'parts', (parts = []) =>
-        parts.length > 0 ? parts : [{ kind: 'text', text: streamingText } as any]
-      );
-      setState('streaming', messageId, undefined!);
+    // Use authoritative parts from payload (AG-UI protocol)
+    if (parts && Array.isArray(parts)) {
+      setState('messages', messageId, 'parts', parts);
+    } else {
+      // Fallback: construct from streaming if backend doesn't send parts
+      const streamingText = state.streaming[messageId]?.text;
+      if (streamingText) {
+        setState('messages', messageId, 'parts', (existingParts = []) => {
+          const textPart = { kind: 'text', text: streamingText } as any;
+          return existingParts.length > 0 ? [textPart, ...existingParts] : [textPart];
+        });
+      }
     }
 
+    // Clear streaming state
+    setState('streaming', messageId, undefined!);
     setState('messages', messageId, 'status', 'completed');
     if (usage) {
       setState('messages', messageId, 'usage', usage);
