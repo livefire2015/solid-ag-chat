@@ -1,4 +1,4 @@
-import { createMemo } from 'solid-js';
+import { createMemo, createEffect } from 'solid-js';
 import { useChatContext } from './ChatProvider';
 import type { MessageDoc, Id } from '../types';
 
@@ -10,10 +10,31 @@ export interface UseConversationReturn {
   cancel: (messageId: Id) => Promise<void>;
 }
 
-export function useConversation(id?: Id): UseConversationReturn {
-  const ctx = useChatContext();
+export interface UseConversationOptions {
+  autoLoad?: boolean;  // Default: true
+}
 
-  const conversationId = createMemo(() => id || ctx.state.activeConversationId);
+export function useConversation(
+  id?: Id | (() => Id | undefined),
+  options?: UseConversationOptions
+): UseConversationReturn {
+  const ctx = useChatContext();
+  const autoLoad = options?.autoLoad !== false;  // Default to true
+
+  const conversationId = createMemo(() => {
+    const idValue = typeof id === 'function' ? id() : id;
+    return idValue || ctx.state.activeConversationId;
+  });
+
+  // Auto-load messages when conversation changes
+  if (autoLoad) {
+    createEffect(() => {
+      const cid = conversationId();
+      if (cid) {
+        ctx.loadMessages(cid);
+      }
+    });
+  }
 
   const messages = createMemo(() => {
     const cid = conversationId();
