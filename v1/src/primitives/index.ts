@@ -6,6 +6,9 @@ export type { ChatProviderProps, ChatContextValue } from './ChatProvider';
 export { useChat } from './useChat';
 export type { UseChatReturn } from './useChat';
 
+export { useConversationList } from './useConversationList';
+export type { UseConversationListReturn } from './useConversationList';
+
 export { useConversation } from './useConversation';
 export type { UseConversationReturn } from './useConversation';
 

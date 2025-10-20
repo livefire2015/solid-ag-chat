@@ -114,34 +114,34 @@ export interface EventPayloads {
 
 export type EventType = keyof EventPayloads;
 
-// Intent payloads (client -> server)
-export interface IntentPayloads {
-  'state.request_snapshot': { sinceRevision?: string };
-
-  'conversation.create': { title?: string; metadata?: Record<string, unknown> };
-  'conversation.select': { conversationId: Id };
-  'conversation.archive': { conversationId: Id };
-
-  'message.send': {
-    clientMessageId: Id;
-    conversationId?: Id;
-    text?: string;
-    parts?: Part[];
-    attachments?: Id[];
-    metadata?: Record<string, unknown>;
-  };
-  'message.abort': { messageId?: Id };
-
-  'attachment.register': { id: Id; name: string; mime: string; size: number; url: string; metadata?: Record<string, unknown> };
-}
-
-export type IntentType = keyof IntentPayloads;
-
-// Minimal client interface the library expects from the consumer app
+// REST client interface
 export interface AgUiClient {
+  // Event handling
   on<E extends EventType>(type: E, handler: (payload: EventPayloads[E]) => void): () => void;
   off<E extends EventType>(type: E, handler: (payload: EventPayloads[E]) => void): void;
-  send<I extends IntentType>(type: I, payload: IntentPayloads[I]): Promise<void>;
+
+  // Conversation management
+  createConversation(title?: string, metadata?: Record<string, unknown>): Promise<ConversationDoc>;
+  listConversations(): Promise<ConversationDoc[]>;
+  getConversation(id: Id): Promise<ConversationDoc>;
+  updateConversation(id: Id, updates: Partial<ConversationDoc>): Promise<ConversationDoc>;
+  archiveConversation(id: Id): Promise<void>;
+
+  // Message management (streaming per message)
+  sendMessage(
+    conversationId: Id | null, // null for auto-create
+    text: string,
+    options?: {
+      attachments?: Id[];
+      metadata?: Record<string, unknown>;
+      onEvent?: (event: { type: string; data: any }) => void;
+    }
+  ): Promise<MessageDoc>;
+
+  getMessages(conversationId: Id): Promise<MessageDoc[]>;
+  cancelMessage(conversationId: Id, messageId: Id): Promise<void>;
+
+  // Cleanup
   close(): void;
 }
 
