@@ -18,21 +18,21 @@ This is a **library** - not a ready-to-use chat UI. It provides:
 
 ## AG-UI Protocol Overview
 
-AG-UI is a **Server-Sent Events (SSE) + REST** protocol for AI chat interfaces:
+AG-UI is a **REST + Per-Message SSE** protocol for AI chat interfaces:
 
 ```
-┌─────────────┐         SSE Events          ┌─────────────┐
-│   Browser   │◄───────────────────────────│   Server    │
-│   Client    │     REST Intents           │  (Python)   │
-│  (SolidJS)  │───────────────────────────►│ (PydanticAI)│
-└─────────────┘                             └─────────────┘
+┌─────────────┐    Per-Message SSE     ┌─────────────┐
+│   Browser   │◄───────────────────────│   Server    │
+│   Client    │     REST API           │  (Python)   │
+│  (SolidJS)  │───────────────────────►│ (PydanticAI)│
+└─────────────┘                        └─────────────┘
 ```
 
 **Key Features:**
-- 🔄 **Server-Authoritative**: State lives on server, client mirrors it
-- 🆔 **sessionId-based**: No localStorage, state is per-session
+- 📨 **Per-Message Streaming**: Each message creates a new SSE stream
+- 🏗️ **RESTful Design**: Standard CRUD operations for conversations/messages
 - 🖼️ **Multimodal Parts**: Text, images, audio, files, tool calls
-- 🔧 **JSON Patch**: Delta updates using RFC 6902 operations
+- ⚡ **Auto-Create Support**: Send messages without creating conversation first
 
 ## Installation
 
@@ -50,12 +50,16 @@ Peer dependency: `solid-js@^1.8.0`
 import { ChatProvider, SseAgClient } from '@livefire2015/solid-ag-chat';
 
 function App() {
-  // Create AG-UI client
+  // Create AG-UI client with REST endpoints
   const client = new SseAgClient({
     baseUrl: 'http://localhost:8000',
+    headers: {
+      'Authorization': 'Bearer YOUR_TOKEN'  // Optional auth
+    },
     paths: {
-      events: '/events',
-      messageSend: '/message/send'
+      conversations: '/conversations',                    // GET/POST conversations
+      messages: '/conversations/:id/messages',           // GET/POST messages
+      autoCreate: '/messages'                            // POST message (auto-creates conversation)
     }
   });
 
@@ -70,24 +74,30 @@ function App() {
 ### 2. Build Your UI with Hooks
 
 ```tsx
-import { useChat, useConversation } from '@livefire2015/solid-ag-chat';
-import { For } from 'solid-js';
+import { useConversationList, useConversation } from '@livefire2015/solid-ag-chat';
+import { For, onMount } from 'solid-js';
 
 function YourChatUI() {
+  // Manage conversation list
   const {
     conversations,
     activeId,
-    setActive,
-    sendUserMessage,
-    isConnected
-  } = useChat();
+    load,
+    create,
+    setActive
+  } = useConversationList();
 
-  const { messages, isStreaming } = useConversation();
+  // Work with active conversation
+  const { messages, isStreaming, send } = useConversation();
+
+  // Load conversations on mount
+  onMount(() => load());
 
   return (
     <div class="flex h-screen">
       {/* Conversation List */}
       <aside class="w-64 border-r">
+        <button onClick={() => create('New Chat')}>+ New Chat</button>
         <For each={conversations()}>
           {conv => (
             <button
@@ -124,7 +134,7 @@ function YourChatUI() {
         <form onSubmit={e => {
           e.preventDefault();
           const input = e.target.elements.message;
-          sendUserMessage(input.value);
+          send(input.value);  // Per-message SSE streaming
           input.value = '';
         }}>
           <input name="message" placeholder="Type a message..." />
@@ -169,19 +179,18 @@ interface ChatProviderProps {
 </ChatProvider>
 ```
 
-### useChat()
+### useConversationList()
 
-Main hook for conversations and global actions.
+Hook for managing the conversation list.
 
 ```typescript
-interface UseChatReturn {
+interface UseConversationListReturn {
   conversations: () => ConversationDoc[];     // Reactive conversation list
   activeId: () => Id | undefined;             // Current conversation ID
+  load: () => Promise<void>;                  // Load conversations from server
+  create: (title?, metadata?) => Promise<ConversationDoc>;  // Create new conversation
   setActive: (id: Id) => void;                // Switch conversation
-  sendUserMessage: (text: string, opts?) => Promise<void>;  // Send message
-  attachFiles: (files: File[]) => Promise<void>;            // Upload files
-  abortGeneration: (messageId?: Id) => Promise<void>;       // Cancel streaming
-  isConnected: () => boolean;                               // Connection status
+  archive: (id: Id) => Promise<void>;         // Archive conversation
 }
 ```
 
@@ -189,20 +198,42 @@ interface UseChatReturn {
 
 ```tsx
 function ConversationSidebar() {
-  const { conversations, activeId, setActive } = useChat();
+  const { conversations, activeId, load, create, setActive } = useConversationList();
+
+  onMount(() => load());  // Load on mount
 
   return (
-    <For each={conversations()}>
-      {conv => (
-        <button
-          onClick={() => setActive(conv.id)}
-          class={activeId() === conv.id ? 'active' : ''}
-        >
-          {conv.title}
-        </button>
-      )}
-    </For>
+    <div>
+      <button onClick={() => create('New Chat')}>+ New</button>
+      <For each={conversations()}>
+        {conv => (
+          <button
+            onClick={() => setActive(conv.id)}
+            class={activeId() === conv.id ? 'active' : ''}
+          >
+            {conv.title}
+          </button>
+        )}
+      </For>
+    </div>
   );
+}
+```
+
+### useChat()
+
+Legacy hook that combines conversation management and messaging.
+
+```typescript
+interface UseChatReturn {
+  conversations: () => ConversationDoc[];     // Reactive conversation list
+  activeId: () => Id | undefined;             // Current conversation ID
+  setActive: (id: Id) => void;                // Switch conversation
+  loadConversations: () => Promise<void>;     // Load conversations
+  createConversation: (title?) => Promise<ConversationDoc>;  // Create conversation
+  sendMessage: (convId, text, opts?) => Promise<void>;       // Send message
+  cancelMessage: (convId, msgId) => Promise<void>;           // Cancel streaming
+  isConnected: () => boolean;                                // Connection status
 }
 ```
 
@@ -214,7 +245,9 @@ Hook for a specific conversation's messages and actions.
 interface UseConversationReturn {
   messages: () => MessageDoc[];               // Reactive message list
   isStreaming: () => boolean;                 // Is any message streaming?
-  send: (text: string, opts?) => Promise<void>;  // Send message in this conversation
+  load: () => Promise<void>;                  // Load messages from server
+  send: (text: string, opts?) => Promise<void>;  // Send message (creates per-message SSE stream)
+  cancel: (messageId: Id) => Promise<void>;   // Cancel streaming message
 }
 ```
 
@@ -222,12 +255,21 @@ interface UseConversationReturn {
 
 ```tsx
 function MessageView() {
-  const { messages, isStreaming, send } = useConversation();
+  const { messages, isStreaming, load, send, cancel } = useConversation();
+
+  onMount(() => load());  // Load messages on mount
 
   return (
     <div>
       <For each={messages()}>
-        {msg => <MessageBubble message={msg} />}
+        {msg => (
+          <div>
+            <MessageBubble message={msg} />
+            {msg.status === 'streaming' && (
+              <button onClick={() => cancel(msg.id)}>Cancel</button>
+            )}
+          </div>
+        )}
       </For>
       {isStreaming() && <TypingIndicator />}
       <input onSubmit={e => send(e.target.value)} />
@@ -417,7 +459,7 @@ function DevApp() {
 
 ## Backend Integration
 
-Your server must implement AG-UI protocol. Example with FastAPI:
+Your server must implement REST + per-message SSE. Example with FastAPI:
 
 ```python
 from fastapi import FastAPI
@@ -425,61 +467,84 @@ from fastapi.responses import StreamingResponse
 import json
 
 app = FastAPI()
-sessions = {}  # In-memory session state
 
-@app.get("/events")
-async def events(session_id: str):
+# Conversation CRUD
+@app.get("/conversations")
+async def list_conversations():
+    return [{"id": "c1", "title": "Chat 1", "createdAt": "...", ...}]
+
+@app.post("/conversations")
+async def create_conversation(payload: dict):
+    conv = create_new_conversation(payload.get('title'))
+    return conv
+
+@app.get("/conversations/{id}/messages")
+async def get_messages(id: str):
+    return [{"id": "m1", "conversationId": id, "role": "user", ...}]
+
+# Per-message SSE streaming
+@app.post("/conversations/{id}/messages")
+async def send_message(id: str, payload: dict):
     async def generate():
-        # Send initial snapshot
-        snap = sessions.get(session_id, create_empty_state(session_id))
-        yield f"event: state.snapshot\ndata: {json.dumps(snap)}\n\n"
+        # Create user message
+        user_msg = create_user_message(id, payload['text'])
+        yield f"event: message.created\ndata: {json.dumps({'message': user_msg})}\n\n"
 
-        # Keep connection alive
-        while True:
-            await asyncio.sleep(0.1)
+        # Create assistant message
+        asst_msg = create_assistant_message(id)
+        yield f"event: message.created\ndata: {json.dumps({'message': asst_msg})}\n\n"
+
+        # Stream response tokens
+        async for token in agent.stream(payload['text']):
+            yield f"event: message.delta\ndata: {json.dumps({'messageId': asst_msg['id'], 'textDelta': token})}\n\n"
+
+        # Complete message
+        yield f"event: message.completed\ndata: {json.dumps({'messageId': asst_msg['id']})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
-@app.post("/message/send")
-async def send_message(payload: dict, session_id: str):
-    # Echo user message
-    emit(session_id, 'message.created', {'message': user_msg})
-
-    # Stream agent response
-    async for token in agent.stream(payload['text']):
-        emit(session_id, 'message.delta', {
-            'messageId': asst_id,
-            'textDelta': token
-        })
-
-    emit(session_id, 'message.completed', {'messageId': asst_id})
+# Auto-create endpoint (no conversation ID required)
+@app.post("/messages")
+async def send_message_auto_create(payload: dict):
+    # Same as above, but creates conversation first
+    conv = create_new_conversation()
+    # ... then stream messages
 ```
 
-## Event Types
+## API Endpoints & Events
 
-### Server → Client (SSE)
+### REST Endpoints (Client → Server)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/conversations` | List conversations |
+| `POST` | `/conversations` | Create conversation |
+| `GET` | `/conversations/:id` | Get conversation |
+| `PATCH` | `/conversations/:id` | Update conversation |
+| `DELETE` | `/conversations/:id` | Archive conversation |
+| `GET` | `/conversations/:id/messages` | Get messages |
+| `POST` | `/conversations/:id/messages` | Send message (returns SSE stream) |
+| `POST` | `/messages` | Send message + auto-create conversation |
+| `DELETE` | `/conversations/:id/messages/:msgId` | Cancel message |
+
+### SSE Events (Server → Client)
+
+Sent during per-message streaming:
 
 | Event | Description |
 |-------|-------------|
-| `client.ready` | Connection established |
-| `state.snapshot` | Full state sync |
-| `conversation.created` | New conversation |
+| `conversation.created` | New conversation created |
 | `conversation.updated` | Conversation changed |
+| `conversation.archived` | Conversation archived |
 | `message.created` | New message |
 | `message.delta` | Streaming text update |
 | `message.completed` | Message finished |
+| `message.errored` | Message failed |
+| `message.canceled` | Message canceled |
 | `message.tool_call` | Tool invocation |
 | `message.tool_result` | Tool result |
-
-### Client → Server (REST)
-
-| Intent | Description |
-|--------|-------------|
-| `conversation.create` | Create conversation |
-| `conversation.select` | Switch conversation |
-| `message.send` | Send user message |
-| `message.abort` | Cancel streaming |
-| `attachment.register` | Register uploaded file |
+| `attachment.available` | File ready |
+| `attachment.failed` | Upload failed |
 
 ## License
 

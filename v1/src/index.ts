@@ -23,8 +23,6 @@ export type {
   StateSnapshot,
   EventPayloads,
   EventType,
-  IntentPayloads,
-  IntentType,
   AgUiClient,
   AgRole,
   JsonPatchOp,
@@ -60,6 +58,7 @@ export {
   ChatProvider,
   useChatContext,
   useChat,
+  useConversationList,
   useConversation,
   useMessages,
   useStreamingText,
@@ -69,6 +68,7 @@ export type {
   ChatProviderProps,
   ChatContextValue,
   UseChatReturn,
+  UseConversationListReturn,
   UseConversationReturn,
 } from './primitives';
 

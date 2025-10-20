@@ -1,4 +1,4 @@
-import type { AgUiClient, EventPayloads, EventType, IntentPayloads, IntentType, StateSnapshot, ConversationDoc, MessageDoc, AttachmentDoc, Id } from '../types';
+import type { AgUiClient, EventPayloads, EventType, StateSnapshot, ConversationDoc, MessageDoc, AttachmentDoc, Id } from '../types';
 
 type Handler<E extends EventType> = (payload: EventPayloads[E]) => void;
 
@@ -12,7 +12,6 @@ class Emitter {
 
 export interface MockClientOptions {
   sessionId?: string;
-  autoReady?: boolean;
   initialSnapshot?: Partial<StateSnapshot>;
   // Generate assistant reply tokens from user text
   replyGenerator?: (userText: string) => string[];
@@ -39,12 +38,7 @@ export class MockAgClient implements AgUiClient {
     this.replyGenerator = opts.replyGenerator || ((t) => this.defaultGenerator(t));
     this.tokenDelayMs = opts.tokenDelayMs ?? 20;
     if (opts.initialSnapshot) this.hydrate(opts.initialSnapshot);
-    if (opts.autoReady ?? true) {
-      queueMicrotask(() => {
-        this.emit('client.ready', { sessionId: this.sessionId });
-        this.emit('state.snapshot', this.buildSnapshot());
-      });
-    }
+    // No auto-emit of client.ready/state.snapshot in REST mode
   }
 
   on<E extends EventType>(type: E, handler: Handler<E>): () => void {
@@ -56,97 +50,134 @@ export class MockAgClient implements AgUiClient {
     this.emitter.off(type, handler as any);
   }
 
-  async send<I extends IntentType>(type: I, payload: IntentPayloads[I]): Promise<void> {
-    if (this.closed) return;
-    switch (type) {
-      case 'state.request_snapshot': {
-        this.emit('state.snapshot', this.buildSnapshot());
-        return;
-      }
-      case 'conversation.create': {
-        const id = this.randId('c_');
-        const now = this.now();
-        const conv: ConversationDoc = {
-          id,
-          title: (payload as any).title || 'New Chat',
-          createdAt: now,
-          updatedAt: now,
-          revision: this.bumpRev(),
-          status: 'active',
-          metadata: (payload as any).metadata,
-        };
-        this.conversations.set(id, conv);
-        this.activeConversationId = id;
-        this.emit('conversation.created', { conversation: conv });
-        return;
-      }
-      case 'conversation.select': {
-        this.activeConversationId = (payload as any).conversationId;
-        return;
-      }
-      case 'conversation.archive': {
-        const cid = (payload as any).conversationId as Id;
-        const conv = this.conversations.get(cid);
-        if (conv) {
-          conv.status = 'archived';
-          conv.updatedAt = this.now();
-          conv.revision = this.bumpRev();
-          this.emit('conversation.updated', { conversation: conv });
-          this.emit('conversation.archived', { conversationId: cid });
-        }
-        return;
-      }
-      case 'attachment.register': {
-        const att = payload as any as AttachmentDoc;
-        this.attachments.set(att.id, att);
-        this.emit('attachment.available', { attachment: att });
-        return;
-      }
-      case 'message.abort': {
-        // Minimal: no active stream tracking; left as an exercise
-        return;
-      }
-      case 'message.send': {
-        const p = payload as IntentPayloads['message.send'];
-        const cid = p.conversationId ?? this.activeConversationId ?? this.ensureConversation();
-        const now = this.now();
-        // Echo user message
-        const userId = this.randId('m_');
-        const userText = (p.text ?? this.partsToText(p.parts)) ?? '';
-        const userMsg: MessageDoc = {
-          id: userId,
-          clientMessageId: p.clientMessageId,
-          conversationId: cid,
-          role: 'user',
-          status: 'completed',
-          parts: p.parts ?? [{ kind: 'text', text: userText }],
-          attachments: p.attachments ?? [],
-          createdAt: now,
-        };
-        this.messages.set(userId, userMsg);
-        this.pushMsgId(cid, userId);
-        this.emit('message.created', { message: userMsg });
+  // Conversation management
+  async createConversation(title?: string, metadata?: Record<string, unknown>): Promise<ConversationDoc> {
+    if (this.closed) throw new Error('Client closed');
+    const id = this.randId('c_');
+    const now = this.now();
+    const conv: ConversationDoc = {
+      id,
+      title: title || 'New Chat',
+      createdAt: now,
+      updatedAt: now,
+      revision: this.bumpRev(),
+      status: 'active',
+      metadata,
+    };
+    this.conversations.set(id, conv);
+    this.activeConversationId = id;
+    this.emit('conversation.created', { conversation: conv });
+    return conv;
+  }
 
-        // Create assistant placeholder
-        const asstId = this.randId('m_');
-        const asstMsg: MessageDoc = {
-          id: asstId,
-          conversationId: cid,
-          role: 'assistant',
-          status: 'streaming',
-          parts: [],
-          attachments: [],
-          createdAt: now,
-        };
-        this.messages.set(asstId, asstMsg);
-        this.pushMsgId(cid, asstId);
-        this.emit('message.created', { message: asstMsg });
+  async listConversations(): Promise<ConversationDoc[]> {
+    if (this.closed) throw new Error('Client closed');
+    return [...this.conversations.values()].filter(c => c.status === 'active');
+  }
 
-        // Stream tokens
-        const tokens = this.replyGenerator(userText);
-        void this.streamTokens(asstId, tokens, cid);
-        return;
-      }
+  async getConversation(id: Id): Promise<ConversationDoc> {
+    if (this.closed) throw new Error('Client closed');
+    const conv = this.conversations.get(id);
+    if (!conv) throw new Error(`Conversation ${id} not found`);
+    return conv;
+  }
+
+  async updateConversation(id: Id, updates: Partial<ConversationDoc>): Promise<ConversationDoc> {
+    if (this.closed) throw new Error('Client closed');
+    const conv = this.conversations.get(id);
+    if (!conv) throw new Error(`Conversation ${id} not found`);
+    Object.assign(conv, updates);
+    conv.updatedAt = this.now();
+    conv.revision = this.bumpRev();
+    this.emit('conversation.updated', { conversation: conv });
+    return conv;
+  }
+
+  async archiveConversation(id: Id): Promise<void> {
+    if (this.closed) throw new Error('Client closed');
+    const conv = this.conversations.get(id);
+    if (conv) {
+      conv.status = 'archived';
+      conv.updatedAt = this.now();
+      conv.revision = this.bumpRev();
+      this.emit('conversation.updated', { conversation: conv });
+      this.emit('conversation.archived', { conversationId: id });
+    }
+  }
+
+  // Message management
+  async sendMessage(
+    conversationId: Id | null,
+    text: string,
+    options?: {
+      attachments?: Id[];
+      metadata?: Record<string, unknown>;
+      onEvent?: (event: { type: string; data: any }) => void;
+    }
+  ): Promise<MessageDoc> {
+    if (this.closed) throw new Error('Client closed');
+    let cid: Id;
+    if (conversationId) {
+      cid = conversationId;
+    } else {
+      const conv = await this.createConversation();
+      cid = conv.id;
+    }
+    const now = this.now();
+
+    // Echo user message
+    const userId = this.randId('m_');
+    const userMsg: MessageDoc = {
+      id: userId,
+      clientMessageId: crypto.randomUUID(),
+      conversationId: cid,
+      role: 'user',
+      status: 'completed',
+      parts: [{ kind: 'text', text }],
+      attachments: options?.attachments ?? [],
+      createdAt: now,
+      metadata: options?.metadata,
+    };
+    this.messages.set(userId, userMsg);
+    this.pushMsgId(cid, userId);
+    this.emit('message.created', { message: userMsg });
+    options?.onEvent?.({ type: 'message.created', data: { message: userMsg } });
+
+    // Create assistant placeholder
+    const asstId = this.randId('m_');
+    const asstMsg: MessageDoc = {
+      id: asstId,
+      conversationId: cid,
+      role: 'assistant',
+      status: 'streaming',
+      parts: [],
+      attachments: [],
+      createdAt: now,
+    };
+    this.messages.set(asstId, asstMsg);
+    this.pushMsgId(cid, asstId);
+    this.emit('message.created', { message: asstMsg });
+    options?.onEvent?.({ type: 'message.created', data: { message: asstMsg } });
+
+    // Stream tokens
+    const tokens = this.replyGenerator(text);
+    void this.streamTokens(asstId, tokens, cid, options?.onEvent);
+
+    return {} as MessageDoc; // Matches real client behavior
+  }
+
+  async getMessages(conversationId: Id): Promise<MessageDoc[]> {
+    if (this.closed) throw new Error('Client closed');
+    const msgIds = this.messagesByConversation.get(conversationId) || [];
+    return msgIds.map(id => this.messages.get(id)!).filter(Boolean);
+  }
+
+  async cancelMessage(conversationId: Id, messageId: Id): Promise<void> {
+    if (this.closed) throw new Error('Client closed');
+    const msg = this.messages.get(messageId);
+    if (msg) {
+      msg.status = 'canceled';
+      this.emit('message.canceled', { messageId });
     }
   }
 
@@ -212,11 +243,13 @@ export class MockAgClient implements AgUiClient {
     for (let i = 0; i < base.length; i += 5) chunks.push(base.slice(i, i + 5));
     return chunks;
   }
-  private async streamTokens(asstId: Id, tokens: string[], cid: Id) {
+  private async streamTokens(asstId: Id, tokens: string[], cid: Id, onEvent?: (event: { type: string; data: any }) => void) {
     let full = '';
     for (const tok of tokens) {
       full += tok;
-      this.emit('message.delta', { messageId: asstId, textDelta: tok });
+      const delta = { messageId: asstId, textDelta: tok };
+      this.emit('message.delta', delta);
+      onEvent?.({ type: 'message.delta', data: delta });
       await new Promise(r => setTimeout(r, this.tokenDelayMs));
     }
     // complete
@@ -224,7 +257,9 @@ export class MockAgClient implements AgUiClient {
     if (msg) {
       msg.status = 'completed';
       msg.parts = [{ kind: 'text', text: full } as any];
-      this.emit('message.completed', { messageId: asstId, usage: { completion: full.split(/\s+/).filter(Boolean).length } });
+      const completed = { messageId: asstId, usage: { completion: full.split(/\s+/).filter(Boolean).length } };
+      this.emit('message.completed', completed);
+      onEvent?.({ type: 'message.completed', data: completed });
     }
     // auto-title if needed
     const conv = this.conversations.get(cid);
@@ -232,7 +267,9 @@ export class MockAgClient implements AgUiClient {
       conv.title = full.slice(0, 40) || 'Conversation';
       conv.updatedAt = this.now();
       conv.revision = this.bumpRev();
-      this.emit('conversation.updated', { conversation: conv });
+      const updated = { conversation: conv };
+      this.emit('conversation.updated', updated);
+      onEvent?.({ type: 'conversation.updated', data: updated });
     }
   }
 }

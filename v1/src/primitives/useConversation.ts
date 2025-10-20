@@ -5,7 +5,9 @@ import type { MessageDoc, Id } from '../types';
 export interface UseConversationReturn {
   messages: () => MessageDoc[];
   isStreaming: () => boolean;
-  send: (text: string, opts?: { files?: File[] }) => Promise<void>;
+  load: () => Promise<void>;
+  send: (text: string, opts?: { attachments?: Id[] }) => Promise<void>;
+  cancel: (messageId: Id) => Promise<void>;
 }
 
 export function useConversation(id?: Id): UseConversationReturn {
@@ -28,41 +30,38 @@ export function useConversation(id?: Id): UseConversationReturn {
     return messages().some(m => m.status === 'streaming');
   });
 
-  const send = async (text: string, opts?: { files?: File[] }) => {
+  const load = async () => {
+    const cid = conversationId();
+    if (!cid) {
+      throw new Error('No conversation ID provided');
+    }
+    await ctx.loadMessages(cid);
+  };
+
+  const send = async (text: string, opts?: { attachments?: Id[] }) => {
     const cid = conversationId();
     if (!cid) {
       throw new Error('No active conversation');
     }
 
-    // Handle file uploads if provided
-    let attachmentIds: Id[] = [];
-    if (opts?.files && opts.files.length > 0 && ctx.upload) {
-      const attachments = await ctx.upload(opts.files);
-      attachmentIds = attachments.map(a => a.id);
-      // Register attachments with backend
-      for (const att of attachments) {
-        await ctx.send('attachment.register', {
-          id: att.id,
-          name: att.name,
-          mime: att.mime,
-          size: att.size,
-          url: att.url,
-        });
-      }
-    }
-
-    // Send message
-    await ctx.send('message.send', {
-      clientMessageId: crypto.randomUUID(),
-      conversationId: cid,
-      text,
-      attachments: attachmentIds,
+    await ctx.sendMessage(cid, text, {
+      attachments: opts?.attachments,
     });
+  };
+
+  const cancel = async (messageId: Id) => {
+    const cid = conversationId();
+    if (!cid) {
+      throw new Error('No active conversation');
+    }
+    await ctx.cancelMessage(cid, messageId);
   };
 
   return {
     messages,
     isStreaming,
+    load,
     send,
+    cancel,
   };
 }
