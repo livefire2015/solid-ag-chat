@@ -12,7 +12,7 @@ export default defineConfig({
       fileName: (format) => `index.${format === 'es' ? 'js' : 'cjs'}`,
     },
     rollupOptions: {
-      external: ['solid-js', 'solid-js/web', 'fast-json-patch'],
+      external: ['solid-js', 'solid-js/web', 'fast-json-patch', '@ag-ui/core', '@ag-ui/client', 'rxjs'],
       output: {
         preserveModules: false,
       },

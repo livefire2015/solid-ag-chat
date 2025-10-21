@@ -9,8 +9,8 @@
 
 This is a **library** - not a ready-to-use chat UI. It provides:
 - ✅ **SolidJS Primitives** - Provider, hooks for building custom chat UIs
-- ✅ **AG-UI Protocol Client** - SSE + REST transport implementation
-- ✅ **Reactive State Management** - Server-authoritative state mirrored locally
+- ✅ **Official AG-UI SDK Client** - Stateless agent execution with streaming
+- ✅ **Reactive State Management** - Client-side state with conversation context
 - ✅ **Type Safety** - Full TypeScript types for AG-UI protocol
 - ✅ **Mock Client** - Testing infrastructure included
 
@@ -18,21 +18,21 @@ This is a **library** - not a ready-to-use chat UI. It provides:
 
 ## AG-UI Protocol Overview
 
-AG-UI is a **REST + Per-Message SSE** protocol for AI chat interfaces:
+AG-UI is a **stateless agent protocol** using the official `@ag-ui/client` SDK:
 
 ```
-┌─────────────┐    Per-Message SSE     ┌─────────────┐
+┌─────────────┐    RxJS Observable     ┌─────────────┐
 │   Browser   │◄───────────────────────│   Server    │
-│   Client    │     REST API           │  (Python)   │
+│   Client    │     /agent/run         │  (Python)   │
 │  (SolidJS)  │───────────────────────►│ (PydanticAI)│
 └─────────────┘                        └─────────────┘
 ```
 
 **Key Features:**
-- 📨 **Per-Message Streaming**: Each message creates a new SSE stream
-- 🏗️ **RESTful Design**: Standard CRUD operations for conversations/messages
-- 🖼️ **Multimodal Parts**: Text, images, audio, files, tool calls
-- ⚡ **Auto-Create Support**: Send messages without creating conversation first
+- 📨 **Stateless Execution**: Client sends full conversation history with each request
+- 🔄 **Streaming Events**: TEXT_MESSAGE_START/CONTENT/END, TOOL_CALL_*, etc.
+- 🛠️ **Tool Calls**: Official `toolCalls` array in messages
+- 💬 **Conversation Management**: Client-side multi-turn context tracking
 
 ## Installation
 
@@ -40,27 +40,28 @@ AG-UI is a **REST + Per-Message SSE** protocol for AI chat interfaces:
 npm install @livefire2015/solid-ag-chat
 ```
 
-Peer dependency: `solid-js@^1.8.0`
+Peer dependencies:
+- `solid-js@^1.8.0`
+- `@ag-ui/core@^0.0.39`
+- `@ag-ui/client@^0.0.39`
+- `rxjs@^7.8.1`
 
 ## Quick Start
 
 ### 1. Wrap Your App with ChatProvider
 
 ```tsx
-import { ChatProvider, SseAgClient } from '@livefire2015/solid-ag-chat';
+import { ChatProvider, createSdkAgent } from '@livefire2015/solid-ag-chat';
 
 function App() {
-  // Create AG-UI client with REST endpoints
-  const client = new SseAgClient({
+  // Create official AG-UI SDK client
+  const client = createSdkAgent({
     baseUrl: 'http://localhost:8000',
     headers: {
       'Authorization': 'Bearer YOUR_TOKEN'  // Optional auth
     },
-    paths: {
-      conversations: '/conversations',                    // GET/POST conversations
-      messages: '/conversations/:id/messages',           // GET/POST messages
-      autoCreate: '/messages'                            // POST message (auto-creates conversation)
-    }
+    agentEndpoint: '/agent/run',              // Default: /agent/run
+    conversationsEndpoint: '/conversations'    // Default: /conversations
   });
 
   return (
@@ -116,14 +117,19 @@ function YourChatUI() {
           <For each={messages()}>
             {msg => (
               <div class={`message ${msg.role}`}>
-                <For each={msg.parts}>
-                  {part => (
-                    <>
-                      {part.kind === 'text' && <p>{part.text}</p>}
-                      {part.kind === 'image' && <img src={part.url} alt={part.alt} />}
-                    </>
-                  )}
-                </For>
+                {/* Text content */}
+                {msg.content && <p>{msg.content}</p>}
+
+                {/* Tool calls */}
+                {msg.toolCalls && (
+                  <For each={msg.toolCalls}>
+                    {tc => (
+                      <div class="tool-call">
+                        🔧 {tc.function.name}({tc.function.arguments})
+                      </div>
+                    )}
+                  </For>
+                )}
               </div>
             )}
           </For>
@@ -134,7 +140,7 @@ function YourChatUI() {
         <form onSubmit={e => {
           e.preventDefault();
           const input = e.target.elements.message;
-          send(input.value);  // Per-message SSE streaming
+          send(input.value);  // Sends to /agent/run with conversation history
           input.value = '';
         }}>
           <input name="message" placeholder="Type a message..." />
@@ -166,7 +172,7 @@ interface ChatProviderProps {
 
 ```tsx
 <ChatProvider
-  client={new SseAgClient({ baseUrl: 'http://localhost:8000' })}
+  client={createSdkAgent({ baseUrl: 'http://localhost:8000' })}
   upload={async (files) => {
     // Upload files to your server
     const formData = new FormData();
@@ -220,23 +226,6 @@ function ConversationSidebar() {
 }
 ```
 
-### useChat()
-
-Legacy hook that combines conversation management and messaging.
-
-```typescript
-interface UseChatReturn {
-  conversations: () => ConversationDoc[];     // Reactive conversation list
-  activeId: () => Id | undefined;             // Current conversation ID
-  setActive: (id: Id) => void;                // Switch conversation
-  loadConversations: () => Promise<void>;     // Load conversations
-  createConversation: (title?) => Promise<ConversationDoc>;  // Create conversation
-  sendMessage: (convId, text, opts?) => Promise<void>;       // Send message
-  cancelMessage: (convId, msgId) => Promise<void>;           // Cancel streaming
-  isConnected: () => boolean;                                // Connection status
-}
-```
-
 ### useConversation(conversationId?)
 
 Hook for a specific conversation's messages and actions.
@@ -246,7 +235,7 @@ interface UseConversationReturn {
   messages: () => MessageDoc[];               // Reactive message list
   isStreaming: () => boolean;                 // Is any message streaming?
   load: () => Promise<void>;                  // Load messages from server
-  send: (text: string, opts?) => Promise<void>;  // Send message (creates per-message SSE stream)
+  send: (text: string, opts?) => Promise<void>;  // Send message (streams via /agent/run)
   cancel: (messageId: Id) => Promise<void>;   // Cancel streaming message
 }
 ```
@@ -294,7 +283,7 @@ function MessageList(props: { conversationId: string }) {
 
   return (
     <For each={messages()}>
-      {msg => <div>{msg.parts[0].text}</div>}
+      {msg => <div>{msg.content}</div>}
     </For>
   );
 }
@@ -319,69 +308,68 @@ function MessageBubble(props: { message: MessageDoc }) {
       {props.message.status === 'streaming' ? (
         <p>{streamingText()}</p>
       ) : (
-        <For each={props.message.parts}>
-          {part => <>{part.kind === 'text' && part.text}</>}
-        </For>
+        <p>{props.message.content}</p>
       )}
     </div>
   );
 }
 ```
 
-## Multimodal Parts
+## Message Structure
 
-Messages use structured parts instead of plain strings:
+Messages follow the official AG-UI schema with `content` for text and `toolCalls` for tool interactions:
 
 ```typescript
-// Text
-const textPart: Part = { kind: 'text', text: 'Hello!' };
+interface Message {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'developer';
+  content: string;                    // Text content
+  toolCalls?: ToolCall[];            // Tool invocations (assistant messages)
 
-// Image
-const imagePart: Part = {
-  kind: 'image',
-  url: 'https://example.com/img.png',
-  mime: 'image/png',
-  alt: 'Description'
-};
+  // Custom fields for conversation management
+  conversationId?: string;
+  status?: 'streaming' | 'completed' | 'errored' | 'canceled';
+  usage?: { prompt?: number; completion?: number; total?: number };
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+  attachments?: string[];            // Attachment IDs
+}
 
-// Tool Call
-const toolCallPart: Part = {
-  kind: 'tool_call',
-  id: 'tc_123',
-  name: 'search',
-  args: { query: 'weather in NYC' }
-};
-
-// Tool Result
-const toolResultPart: Part = {
-  kind: 'tool_result',
-  id: 'tc_123',
-  name: 'search',
-  result: { temperature: 72, conditions: 'sunny' }
-};
+interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;               // JSON string
+  };
+}
 ```
 
-**Rendering Parts:**
+**Rendering Messages:**
 
 ```tsx
-<For each={message.parts}>
-  {part => (
-    <>
-      {part.kind === 'text' && <p>{part.text}</p>}
-      {part.kind === 'image' && (
-        <img src={part.url} alt={part.alt} class="rounded" />
+<For each={messages()}>
+  {msg => (
+    <div class={`message-${msg.role}`}>
+      {/* Text content */}
+      {msg.content && <p class="content">{msg.content}</p>}
+
+      {/* Tool calls */}
+      {msg.toolCalls && (
+        <For each={msg.toolCalls}>
+          {tc => {
+            const args = JSON.parse(tc.function.arguments);
+            return (
+              <div class="tool-call">
+                <span class="tool-icon">🔧</span>
+                <span class="tool-name">{tc.function.name}</span>
+                <pre class="tool-args">{JSON.stringify(args, null, 2)}</pre>
+              </div>
+            );
+          }}
+        </For>
       )}
-      {part.kind === 'tool_call' && (
-        <div class="tool-call">
-          🔧 {part.name}({JSON.stringify(part.args)})
-        </div>
-      )}
-      {part.kind === 'tool_result' && (
-        <div class="tool-result">
-          ✅ {JSON.stringify(part.result)}
-        </div>
-      )}
-    </>
+    </div>
   )}
 </For>
 ```
@@ -396,7 +384,9 @@ import type { AgUiClient } from '@livefire2015/solid-ag-chat';
 class MyCustomClient implements AgUiClient {
   on(type, handler) { /* ... */ }
   off(type, handler) { /* ... */ }
-  async send(type, payload) { /* ... */ }
+  async createConversation(title?, metadata?) { /* ... */ }
+  async sendMessage(convId, text, opts?) { /* ... */ }
+  // ... implement other methods
   close() { /* ... */ }
 }
 
@@ -442,7 +432,6 @@ import { MockAgClient, ChatProvider } from '@livefire2015/solid-ag-chat';
 
 function DevApp() {
   const mockClient = new MockAgClient({
-    autoReady: true,
     tokenDelayMs: 30,  // Simulate streaming
     replyGenerator: (userText) => {
       return `Mock: ${userText}`.match(/.{1,5}/g) || [];
@@ -459,16 +448,19 @@ function DevApp() {
 
 ## Backend Integration
 
-Your server must implement REST + per-message SSE. Example with FastAPI:
+Your server must implement the official AG-UI protocol. Example with PydanticAI:
 
 ```python
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-import json
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models.openai import OpenAIModel
+from ag_ui.server import stream_run_events
 
 app = FastAPI()
+agent = Agent(OpenAIModel('gpt-4'))
 
-# Conversation CRUD
+# Conversation CRUD (custom endpoints)
 @app.get("/conversations")
 async def list_conversations():
     return [{"id": "c1", "title": "Chat 1", "createdAt": "...", ...}]
@@ -480,71 +472,111 @@ async def create_conversation(payload: dict):
 
 @app.get("/conversations/{id}/messages")
 async def get_messages(id: str):
-    return [{"id": "m1", "conversationId": id, "role": "user", ...}]
+    return [{"id": "m1", "conversationId": id, "role": "user", "content": "Hello"}]
 
-# Per-message SSE streaming
-@app.post("/conversations/{id}/messages")
-async def send_message(id: str, payload: dict):
-    async def generate():
-        # Create user message
-        user_msg = create_user_message(id, payload['text'])
-        yield f"event: message.created\ndata: {json.dumps({'message': user_msg})}\n\n"
+# Official AG-UI agent execution endpoint
+@app.post("/agent/run")
+async def run_agent(input: RunAgentInput):
+    """
+    Official AG-UI endpoint for stateless agent execution.
+    Client sends full conversation history with each request.
+    """
+    # Convert AG-UI messages to PydanticAI format
+    message_history = [
+        ModelMessage(role=msg['role'], content=msg['content'])
+        for msg in input.messages
+    ]
 
-        # Create assistant message
-        asst_msg = create_assistant_message(id)
-        yield f"event: message.created\ndata: {json.dumps({'message': asst_msg})}\n\n"
+    # Run agent and stream AG-UI events
+    result = await agent.run(
+        user_prompt=input.messages[-1]['content'],
+        message_history=message_history[:-1]
+    )
 
-        # Stream response tokens
-        async for token in agent.stream(payload['text']):
-            yield f"event: message.delta\ndata: {json.dumps({'messageId': asst_msg['id'], 'textDelta': token})}\n\n"
-
-        # Complete message
-        yield f"event: message.completed\ndata: {json.dumps({'messageId': asst_msg['id']})}\n\n"
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
-
-# Auto-create endpoint (no conversation ID required)
-@app.post("/messages")
-async def send_message_auto_create(payload: dict):
-    # Same as above, but creates conversation first
-    conv = create_new_conversation()
-    # ... then stream messages
+    # Stream official AG-UI events (TEXT_MESSAGE_START, TEXT_MESSAGE_CONTENT, etc.)
+    return StreamingResponse(
+        stream_run_events(result),
+        media_type='text/event-stream'
+    )
 ```
 
-## API Endpoints & Events
+## Official AG-UI Events
 
-### REST Endpoints (Client → Server)
+The SDK client emits these official AG-UI events during streaming:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/conversations` | List conversations |
-| `POST` | `/conversations` | Create conversation |
-| `GET` | `/conversations/:id` | Get conversation |
-| `PATCH` | `/conversations/:id` | Update conversation |
-| `DELETE` | `/conversations/:id` | Archive conversation |
-| `GET` | `/conversations/:id/messages` | Get messages |
-| `POST` | `/conversations/:id/messages` | Send message (returns SSE stream) |
-| `POST` | `/messages` | Send message + auto-create conversation |
-| `DELETE` | `/conversations/:id/messages/:msgId` | Cancel message |
+### Message Events
+| Event | Description |
+|-------|-------------|
+| `TEXT_MESSAGE_START` | Text message streaming started |
+| `TEXT_MESSAGE_CONTENT` | Text delta (incremental content) |
+| `TEXT_MESSAGE_END` | Text message completed |
 
-### SSE Events (Server → Client)
+### Tool Events
+| Event | Description |
+|-------|-------------|
+| `TOOL_CALL_START` | Tool call started |
+| `TOOL_CALL_ARGS` | Tool arguments delta |
+| `TOOL_CALL_END` | Tool call completed |
+| `TOOL_CALL_RESULT` | Tool result available |
 
-Sent during per-message streaming:
+### State Events
+| Event | Description |
+|-------|-------------|
+| `STATE_SNAPSHOT` | Full state snapshot |
+| `STATE_DELTA` | JSON Patch state delta |
+| `MESSAGES_SNAPSHOT` | Messages snapshot |
 
+### Custom Conversation Events
 | Event | Description |
 |-------|-------------|
 | `conversation.created` | New conversation created |
 | `conversation.updated` | Conversation changed |
 | `conversation.archived` | Conversation archived |
-| `message.created` | New message |
-| `message.delta` | Streaming text update |
-| `message.completed` | Message finished |
+| `message.created` | User message created |
 | `message.errored` | Message failed |
 | `message.canceled` | Message canceled |
-| `message.tool_call` | Tool invocation |
-| `message.tool_result` | Tool result |
-| `attachment.available` | File ready |
-| `attachment.failed` | Upload failed |
+
+## Migration from v0.x
+
+If you're upgrading from the old `parts[]` system:
+
+**Before (v0.x):**
+```tsx
+<For each={msg.parts}>
+  {part => (
+    <>
+      {part.kind === 'text' && <p>{part.text}</p>}
+      {part.kind === 'tool_call' && <div>{part.name}</div>}
+    </>
+  )}
+</For>
+```
+
+**After (v1.0):**
+```tsx
+{msg.content && <p>{msg.content}</p>}
+{msg.toolCalls && (
+  <For each={msg.toolCalls}>
+    {tc => <div>{tc.function.name}</div>}
+  </For>
+)}
+```
+
+**Client Migration:**
+```tsx
+// Before: SseAgClient with REST + SSE
+const client = new SseAgClient({
+  baseUrl: 'http://localhost:8000',
+  paths: { conversations: '/conversations', messages: '/conversations/:id/messages' }
+});
+
+// After: Official SDK client
+const client = createSdkAgent({
+  baseUrl: 'http://localhost:8000',
+  agentEndpoint: '/agent/run',              // Stateless agent execution
+  conversationsEndpoint: '/conversations'    // Conversation management
+});
+```
 
 ## License
 
@@ -554,5 +586,5 @@ MIT
 
 - [GitHub](https://github.com/livefire2015/solid-ag-chat)
 - [npm](https://www.npmjs.com/package/@livefire2015/solid-ag-chat)
-- [AG-UI Protocol](https://docs.ag-ui.com)
+- [AG-UI Protocol](https://github.com/pydantic/agent-ui-spec)
 - [PydanticAI](https://ai.pydantic.dev)

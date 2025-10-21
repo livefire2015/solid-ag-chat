@@ -1,6 +1,6 @@
-import type { AgUiClient, EventPayloads, EventType, StateSnapshot, ConversationDoc, MessageDoc, AttachmentDoc, Id } from '../types';
+import type { AgUiClient, AllEventType, StateSnapshot, ConversationDoc, MessageDoc, AttachmentDoc, Id } from '../types';
 
-type Handler<E extends EventType> = (payload: EventPayloads[E]) => void;
+type Handler<E extends AllEventType> = (payload: any) => void;
 
 class Emitter {
   private map = new Map<string, Set<Function>>();
@@ -41,12 +41,12 @@ export class MockAgClient implements AgUiClient {
     // No auto-emit of client.ready/state.snapshot in REST mode
   }
 
-  on<E extends EventType>(type: E, handler: Handler<E>): () => void {
+  on<E extends AllEventType>(type: E, handler: Handler<E>): () => void {
     this.emitter.on(type, handler as any);
     return () => this.off(type, handler);
   }
 
-  off<E extends EventType>(type: E, handler: Handler<E>): void {
+  off<E extends AllEventType>(type: E, handler: Handler<E>): void {
     this.emitter.off(type, handler as any);
   }
 
@@ -132,8 +132,8 @@ export class MockAgClient implements AgUiClient {
       clientMessageId: crypto.randomUUID(),
       conversationId: cid,
       role: 'user',
+      content: text,
       status: 'completed',
-      parts: [{ kind: 'text', text }],
       attachments: options?.attachments ?? [],
       createdAt: now,
       metadata: options?.metadata,
@@ -149,8 +149,8 @@ export class MockAgClient implements AgUiClient {
       id: asstId,
       conversationId: cid,
       role: 'assistant',
+      content: '',
       status: 'streaming',
-      parts: [],
       attachments: [],
       createdAt: now,
     };
@@ -195,7 +195,9 @@ export class MockAgClient implements AgUiClient {
     if (snap.revision) this.revision = Number(snap.revision);
     this.agent = snap.agent;
     // Build index
-    for (const m of this.messages.values()) this.pushMsgId(m.conversationId, m.id);
+    for (const m of this.messages.values()) {
+      if (m.conversationId) this.pushMsgId(m.conversationId, m.id);
+    }
   }
 
   private buildSnapshot(): StateSnapshot {
@@ -210,7 +212,7 @@ export class MockAgClient implements AgUiClient {
     };
   }
 
-  private emit<E extends EventType>(type: E, payload: EventPayloads[E]) {
+  private emit<E extends AllEventType>(type: E, payload: any) {
     this.emitter.emit(type, payload);
   }
 
@@ -231,11 +233,7 @@ export class MockAgClient implements AgUiClient {
     this.emit('conversation.created', { conversation: conv });
     return id;
   }
-  private partsToText(parts?: MessageDoc['parts']): string | undefined {
-    if (!parts) return undefined;
-    const t = parts.find(p => p.kind === 'text') as any;
-    return t?.text as string | undefined;
-  }
+  // NOTE: partsToText removed - using message.content directly now
   private defaultGenerator(text: string): string[] {
     const base = text && text.trim().length > 0 ? `Mock reply: ${text}` : 'Hello from mock agent!';
     // naive tokenization: split into ~5 char chunks
@@ -256,7 +254,7 @@ export class MockAgClient implements AgUiClient {
     const msg = this.messages.get(asstId);
     if (msg) {
       msg.status = 'completed';
-      msg.parts = [{ kind: 'text', text: full } as any];
+      msg.content = full; // Official AG-UI field
       const completed = { messageId: asstId, usage: { completion: full.split(/\s+/).filter(Boolean).length } };
       this.emit('message.completed', completed);
       onEvent?.({ type: 'message.completed', data: completed });
