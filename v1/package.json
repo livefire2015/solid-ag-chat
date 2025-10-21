@@ -48,7 +48,10 @@
     "vite-plugin-solid": "^2.10.0"
   },
   "dependencies": {
-    "fast-json-patch": "^3.1.1"
+    "@ag-ui/client": "^0.0.39",
+    "@ag-ui/core": "^0.0.39",
+    "fast-json-patch": "^3.1.1",
+    "rxjs": "^7.8.1"
   },
   "repository": {
     "type": "git",

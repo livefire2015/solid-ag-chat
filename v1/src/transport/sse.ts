@@ -1,13 +1,12 @@
 import type {
   AgUiClient,
-  EventPayloads,
-  EventType,
+  AllEventType,
   Id,
   ConversationDoc,
   MessageDoc,
 } from '../types';
 
-type Handler<E extends EventType> = (payload: EventPayloads[E]) => void;
+type Handler<E extends AllEventType> = (payload: any) => void;
 
 export interface SseAgClientOptions {
   baseUrl: string;
@@ -41,19 +40,19 @@ export class SseAgClient implements AgUiClient {
   }
 
   // Event handling (unchanged)
-  on<E extends EventType>(type: E, handler: Handler<E>): () => void {
+  on<E extends AllEventType>(type: E, handler: Handler<E>): () => void {
     const set = this.listeners.get(type) || new Set();
     set.add(handler as any);
     this.listeners.set(type, set);
     return () => this.off(type, handler);
   }
 
-  off<E extends EventType>(type: E, handler: Handler<E>): void {
+  off<E extends AllEventType>(type: E, handler: Handler<E>): void {
     const set = this.listeners.get(type);
     set?.delete(handler as any);
   }
 
-  private emit<E extends EventType>(type: E, payload: EventPayloads[E]) {
+  private emit<E extends AllEventType>(type: E, payload: any) {
     const set = this.listeners.get(type);
     if (!set) return;
     set.forEach((fn) => {
@@ -85,7 +84,7 @@ export class SseAgClient implements AgUiClient {
     const conv = await res.json();
 
     // Emit event for store
-    this.emit('conversation.created' as EventType, { conversation: conv } as any);
+    this.emit('conversation.created', { conversation: conv } as any);
 
     return conv;
   }
@@ -137,7 +136,7 @@ export class SseAgClient implements AgUiClient {
     const conv = await res.json();
 
     // Emit event for store
-    this.emit('conversation.updated' as EventType, { conversation: conv } as any);
+    this.emit('conversation.updated', { conversation: conv } as any);
 
     return conv;
   }
@@ -155,7 +154,7 @@ export class SseAgClient implements AgUiClient {
     }
 
     // Emit event for store
-    this.emit('conversation.archived' as EventType, { conversationId: id } as any);
+    this.emit('conversation.archived', { conversationId: id } as any);
   }
 
   // Message Streaming (per-message SSE)
@@ -242,7 +241,7 @@ export class SseAgClient implements AgUiClient {
           const event = this.parseSSEMessage(part);
           if (event) {
             // Emit to internal listeners (store)
-            this.emit(event.type as EventType, event.data);
+            this.emit(event.type as AllEventType, event.data);
 
             // Call optional external handler
             onEvent?.(event);

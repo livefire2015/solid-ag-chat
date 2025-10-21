@@ -44,7 +44,7 @@ export function useConversation(
     return messageIds
       .map(mid => ctx.state.messages[mid])
       .filter(Boolean)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
   });
 
   const isStreaming = createMemo(() => {

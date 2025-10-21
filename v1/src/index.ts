@@ -1,5 +1,5 @@
 // ============================================================================
-// AG-UI Protocol Types
+// AG-UI Protocol Types (Official + Extensions)
 // ============================================================================
 export type {
   Id,
@@ -8,14 +8,8 @@ export type {
   AttachmentState,
   ConversationDoc,
   UsageDoc,
-  TextPart,
-  ImagePart,
-  AudioPart,
-  FilePart,
-  ToolCallPart,
-  ToolResultPart,
-  Part,
   MessageDoc,
+  Message, // Official AG-UI Message type
   AttachmentDoc,
   ToolDefinition,
   McpServerRef,
@@ -30,9 +24,39 @@ export type {
   AgSpecEventType,
 } from './types';
 
+// Re-export official AG-UI types from core
+export type {
+  ToolCall,
+  FunctionCall,
+  Tool,
+  Context,
+  State,
+  RunAgentInput,
+  BaseEvent,
+  TextMessageStartEvent,
+  TextMessageContentEvent,
+  TextMessageEndEvent,
+  ToolCallStartEvent,
+  ToolCallArgsEvent,
+  ToolCallEndEvent,
+  ToolCallResultEvent,
+  StateSnapshotEvent,
+  StateDeltaEvent,
+  MessagesSnapshotEvent,
+  RunStartedEvent,
+  RunFinishedEvent,
+  RunErrorEvent,
+} from '@ag-ui/core';
+
 // ============================================================================
-// Transport (SSE + REST)
+// Transport (Official SDK + Legacy)
 // ============================================================================
+
+// NEW: Official AG-UI SDK client
+export type { SdkAgentOptions } from './transport/sdk-agent';
+export { SdkAgClient, createSdkAgent } from './transport/sdk-agent';
+
+// LEGACY: Custom SSE client (deprecated - use createSdkAgent instead)
 export type { SseAgClientOptions } from './transport/sse';
 export { SseAgClient } from './transport/sse';
 
@@ -43,10 +67,12 @@ export type { ChatState } from './store/state';
 export {
   initStateFromSnapshot,
   toSnapshot,
-  applyJsonPatch,
   applyNormalizedEvent,
   applySpecEvent,
 } from './store/state';
+
+// NOTE: applyJsonPatch removed - use fast-json-patch library directly:
+// import { applyPatch } from 'fast-json-patch';
 
 export type { AgUiStore } from './store/createAgUiStore';
 export { createAgUiStore } from './store/createAgUiStore';

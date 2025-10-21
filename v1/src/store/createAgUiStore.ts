@@ -34,6 +34,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     attachments: {},
     messagesByConversation: {},
     streaming: {},
+    toolCallsInProgress: {},
   });
 
   const [isConnected, setIsConnected] = createSignal(true); // Always connected in REST mode
@@ -55,6 +56,8 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     setState('conversations', id, 'status', 'archived');
   });
 
+  // Legacy event for user messages (backward compatibility)
+  // TODO: Migrate to TEXT_MESSAGE_* events for user messages too
   client.on('message.created', (payload) => {
     const m = (payload as any).message;
     setState('messages', m.id, m);
@@ -63,41 +66,41 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     );
   });
 
-  client.on('message.delta', (payload) => {
-    const { messageId, textDelta, partDelta } = payload as any;
-    if (textDelta) {
-      setState('streaming', messageId, (s = { text: '' }) => ({
-        text: s.text + textDelta
-      }));
+  // Official AG-UI events for text streaming
+  client.on('TEXT_MESSAGE_START', (payload) => {
+    const p = payload as any;
+    const msg = {
+      id: p.messageId,
+      role: p.role || 'assistant',
+      content: '',
+      conversationId: state.activeConversationId,
+      status: 'streaming' as const,
+      createdAt: new Date().toISOString(),
+    };
+    setState('messages', msg.id, msg);
+    if (msg.conversationId) {
+      setState('messagesByConversation', msg.conversationId, (arr = []) =>
+        arr.includes(msg.id) ? arr : [...arr, msg.id]
+      );
     }
-    if (partDelta) {
-      setState('messages', messageId, 'parts', (parts = []) => [...parts, partDelta]);
-    }
+    setState('streaming', msg.id, { text: '' });
   });
 
-  client.on('message.completed', (payload) => {
-    const { messageId, usage, parts } = payload as any;
+  client.on('TEXT_MESSAGE_CONTENT', (payload) => {
+    const { messageId, delta } = payload as any;
+    setState('streaming', messageId, (s = { text: '' }) => ({
+      text: s.text + (delta || '')
+    }));
+  });
 
-    // Use authoritative parts from payload (AG-UI protocol)
-    if (parts && Array.isArray(parts)) {
-      setState('messages', messageId, 'parts', parts);
-    } else {
-      // Fallback: construct from streaming if backend doesn't send parts
-      const streamingText = state.streaming[messageId]?.text;
-      if (streamingText) {
-        setState('messages', messageId, 'parts', (existingParts = []) => {
-          const textPart = { kind: 'text', text: streamingText } as any;
-          return existingParts.length > 0 ? [textPart, ...existingParts] : [textPart];
-        });
-      }
+  client.on('TEXT_MESSAGE_END', (payload) => {
+    const { messageId } = payload as any;
+    const streamingText = state.streaming[messageId]?.text;
+    if (streamingText) {
+      setState('messages', messageId, 'content', streamingText);
     }
-
-    // Clear streaming state
     setState('streaming', messageId, undefined!);
     setState('messages', messageId, 'status', 'completed');
-    if (usage) {
-      setState('messages', messageId, 'usage', usage);
-    }
   });
 
   client.on('message.errored', (payload) => {
@@ -110,14 +113,40 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     setState('messages', messageId, 'status', 'canceled');
   });
 
-  client.on('message.tool_call', (payload) => {
-    const { messageId, part } = payload as any;
-    setState('messages', messageId, 'parts', (parts = []) => [...parts, part]);
+  // Official AG-UI events for tool calls
+  client.on('TOOL_CALL_START', (payload) => {
+    const { messageId, toolCallId, toolName } = payload as any;
+    setState('toolCallsInProgress', toolCallId, {
+      id: toolCallId,
+      name: toolName,
+      args: '',
+      messageId,
+    });
   });
 
-  client.on('message.tool_result', (payload) => {
-    const { messageId, part } = payload as any;
-    setState('messages', messageId, 'parts', (parts = []) => [...parts, part]);
+  client.on('TOOL_CALL_ARGS', (payload) => {
+    const { toolCallId, delta } = payload as any;
+    setState('toolCallsInProgress', toolCallId, 'args', (args = '') => args + (delta || ''));
+  });
+
+  client.on('TOOL_CALL_END', (payload) => {
+    const { toolCallId } = payload as any;
+    const tc = state.toolCallsInProgress[toolCallId];
+    if (tc) {
+      const msg = state.messages[tc.messageId];
+      if (msg) {
+        const toolCall = {
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: tc.args,
+          },
+        };
+        setState('messages', tc.messageId, 'toolCalls', (arr = []) => [...arr, toolCall]);
+      }
+      setState('toolCallsInProgress', toolCallId, undefined!);
+    }
   });
 
   client.on('attachment.available', (payload) => {
@@ -156,7 +185,8 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     const messages = await client.getMessages(conversationId);
     messages.forEach(m => {
       setState('messages', m.id, m);
-      setState('messagesByConversation', m.conversationId, (arr = []) =>
+      const cid = m.conversationId || conversationId;
+      setState('messagesByConversation', cid, (arr = []) =>
         arr.includes(m.id) ? arr : [...arr, m.id]
       );
     });
