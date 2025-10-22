@@ -132,7 +132,8 @@ export class SdkAgClient implements AgUiClient {
       throw new Error(`Failed to list conversations: ${res.status} ${errorText}`);
     }
 
-    return res.json();
+    const data = await res.json();
+    return data.conversations || [];
   }
 
   async getConversation(id: Id): Promise<ConversationDoc> {
@@ -373,7 +374,8 @@ export class SdkAgClient implements AgUiClient {
       throw new Error(`Failed to get messages: ${res.status} ${errorText}`);
     }
 
-    return res.json();
+    const data = await res.json();
+    return data.messages || [];
   }
 
   async cancelMessage(conversationId: Id, messageId: Id): Promise<void> {
