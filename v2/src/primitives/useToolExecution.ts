@@ -1,5 +1,5 @@
 import { createMemo } from 'solid-js';
-import { useChat } from './useChat';
+import { useChatContext } from './ChatProvider';
 import type { ToolExecution } from '../types';
 
 /**
@@ -7,7 +7,7 @@ import type { ToolExecution } from '../types';
  * Useful for showing loading indicators, results, or errors in the UI
  */
 export function useToolExecution(toolCallId: string) {
-  const store = useChat();
+  const store = useChatContext();
 
   /**
    * Get the execution record for this tool call

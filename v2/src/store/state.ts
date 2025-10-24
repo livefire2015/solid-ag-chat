@@ -14,7 +14,7 @@ import type { ToolCall } from '@ag-ui/core';
 import { applyPatch, Operation } from 'fast-json-patch';
 
 // Tool call tracking for in-progress tool calls
-interface ToolCallInProgress {
+export interface ToolCallInProgress {
   id: string;
   name: string;
   args: string; // Accumulated JSON string

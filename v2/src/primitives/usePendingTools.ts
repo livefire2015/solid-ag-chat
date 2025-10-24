@@ -1,5 +1,5 @@
 import { createMemo } from 'solid-js';
-import { useChat } from './useChat';
+import { useChatContext } from './ChatProvider';
 import type { Id, ToolExecution } from '../types';
 
 /**
@@ -7,7 +7,7 @@ import type { Id, ToolExecution } from '../types';
  * Useful for showing a list of tools awaiting execution or for manual tool execution
  */
 export function usePendingTools(conversationId?: Id) {
-  const store = useChat();
+  const store = useChatContext();
 
   /**
    * Get all pending tool executions
