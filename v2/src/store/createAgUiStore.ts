@@ -1,12 +1,17 @@
 import { createStore } from 'solid-js/store';
 import { createSignal } from 'solid-js';
 import type { AgUiClient, Id, ConversationDoc } from '../types';
+import type { Tool } from '@ag-ui/core';
 import type { ChatState } from './state';
 import { initStateFromSnapshot, applyNormalizedEvent } from './state';
+import { ToolExecutor } from '../tool-executor';
 
 export interface AgUiStore {
   state: ChatState;
   isConnected: () => boolean;
+
+  // V2: Tool executor
+  toolExecutor?: ToolExecutor;
 
   // Conversation management
   loadConversations: () => Promise<void>;
@@ -19,13 +24,22 @@ export interface AgUiStore {
   sendMessage: (conversationId: Id | null, text: string, options?: {
     attachments?: Id[];
     metadata?: Record<string, unknown>;
+    tools?: Tool[]; // V2: Pass tools for this message
   }) => Promise<void>;
   cancelMessage: (conversationId: Id, messageId: Id) => Promise<void>;
 
   close: () => void;
 }
 
-export function createAgUiStore(client: AgUiClient): AgUiStore {
+export interface CreateAgUiStoreOptions {
+  client: AgUiClient;
+  toolExecutor?: ToolExecutor; // V2: Optional tool executor for bidirectional tools
+}
+
+export function createAgUiStore(clientOrOptions: AgUiClient | CreateAgUiStoreOptions): AgUiStore {
+  // Support both old API (client only) and new API (options object)
+  const client = 'on' in clientOrOptions ? clientOrOptions : clientOrOptions.client;
+  const toolExecutor = 'on' in clientOrOptions ? undefined : clientOrOptions.toolExecutor;
   // Initialize empty state
   const [state, setState] = createStore<ChatState>({
     revision: '0',
@@ -129,7 +143,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     setState('toolCallsInProgress', toolCallId, 'args', (args = '') => args + (delta || ''));
   });
 
-  client.on('TOOL_CALL_END', (payload) => {
+  client.on('TOOL_CALL_END', async (payload) => {
     const { toolCallId } = payload as any;
     const tc = state.toolCallsInProgress[toolCallId];
     if (tc) {
@@ -144,6 +158,36 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
           },
         };
         setState('messages', tc.messageId, 'toolCalls', (arr = []) => [...arr, toolCall]);
+
+        // V2: If tool executor is available, execute the tool
+        if (toolExecutor) {
+          try {
+            // Parse tool arguments
+            const args = JSON.parse(tc.args || '{}');
+
+            // Execute tool in frontend
+            const result = await toolExecutor.executeTool(
+              tc.id,
+              tc.name,
+              args,
+              msg.conversationId || state.activeConversationId || '',
+              tc.messageId
+            );
+
+            // Send tool result back to agent to resume execution
+            // Note: This requires the client to have a sendToolResult method
+            if ('sendToolResult' in client && typeof (client as any).sendToolResult === 'function') {
+              await (client as any).sendToolResult(
+                msg.conversationId || state.activeConversationId,
+                tc.id,
+                result
+              );
+            }
+          } catch (error) {
+            console.error(`Tool execution failed for ${tc.name}:`, error);
+            // TODO: Emit tool execution error event
+          }
+        }
       }
       setState('toolCallsInProgress', toolCallId, undefined!);
     }
@@ -198,6 +242,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     options?: {
       attachments?: Id[];
       metadata?: Record<string, unknown>;
+      tools?: Tool[]; // V2: Pass tools
     }
   ) => {
     await client.sendMessage(conversationId, text, options);
@@ -210,6 +255,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   return {
     state,
     isConnected,
+    toolExecutor, // V2: Expose tool executor
     loadConversations,
     createConversation,
     setActiveConversation,
