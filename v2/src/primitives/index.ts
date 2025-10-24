@@ -14,3 +14,8 @@ export type { UseConversationReturn, UseConversationOptions } from './useConvers
 
 export { useMessages } from './useMessages';
 export { useStreamingText } from './useStreamingText';
+
+// V2: Tool Execution Hooks
+export { useToolCalls } from './useToolCalls';
+export { useToolExecution } from './useToolExecution';
+export { usePendingTools } from './usePendingTools';

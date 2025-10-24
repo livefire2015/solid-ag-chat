@@ -22,6 +22,11 @@ export type {
   JsonPatchOp,
   AgSpecEventPayloads,
   AgSpecEventType,
+  // V2: Tool Execution Types
+  ToolHandler,
+  ToolExecutionStatus,
+  ToolExecution,
+  RegisteredTool,
 } from './types';
 
 // Re-export official AG-UI types from core
@@ -78,6 +83,11 @@ export type { AgUiStore } from './store/createAgUiStore';
 export { createAgUiStore } from './store/createAgUiStore';
 
 // ============================================================================
+// V2: Tool Execution Engine
+// ============================================================================
+export { ToolExecutor } from './tool-executor';
+
+// ============================================================================
 // SolidJS Primitives (Recommended API)
 // ============================================================================
 export {
@@ -88,6 +98,10 @@ export {
   useConversation,
   useMessages,
   useStreamingText,
+  // V2: Tool Execution Primitives
+  useToolCalls,
+  useToolExecution,
+  usePendingTools,
 } from './primitives';
 
 export type {
