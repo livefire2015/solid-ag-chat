@@ -1,12 +1,13 @@
 import { createMemo, createEffect } from 'solid-js';
 import { useChatContext } from './ChatProvider';
 import type { MessageDoc, Id } from '../types';
+import type { Tool } from '@ag-ui/core';
 
 export interface UseConversationReturn {
   messages: () => MessageDoc[];
   isStreaming: () => boolean;
   load: () => Promise<void>;
-  send: (text: string, opts?: { attachments?: Id[] }) => Promise<void>;
+  send: (text: string, opts?: { attachments?: Id[]; tools?: Tool[] }) => Promise<void>; // V2: Add tools option
   cancel: (messageId: Id) => Promise<void>;
 }
 
@@ -59,14 +60,24 @@ export function useConversation(
     await ctx.loadMessages(cid);
   };
 
-  const send = async (text: string, opts?: { attachments?: Id[] }) => {
+  const send = async (text: string, opts?: { attachments?: Id[]; tools?: Tool[] }) => {
     const cid = conversationId();
     if (!cid) {
       throw new Error('No active conversation');
     }
 
+    // V2: Merge provider-level tools with per-message tools
+    let tools = opts?.tools;
+    if (ctx.toolExecutor) {
+      const providerTools = ctx.toolExecutor.getTools();
+      if (providerTools.length > 0) {
+        tools = tools ? [...providerTools, ...tools] : providerTools;
+      }
+    }
+
     await ctx.sendMessage(cid, text, {
       attachments: opts?.attachments,
+      tools, // V2: Pass merged tools
     });
   };
 
