@@ -1,7 +1,7 @@
 {
   "name": "@livefire2015/solid-ag-chat",
-  "version": "1.0.2",
-  "description": "SolidJS chat components with official AG-UI protocol support",
+  "version": "2.0.0",
+  "description": "SolidJS chat library with AG-UI protocol and bidirectional tool execution",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -30,6 +30,9 @@
     "ai",
     "pydantic-ai",
     "components",
+    "tools",
+    "bidirectional",
+    "human-in-the-loop",
     "sse",
     "server-sent-events"
   ],
