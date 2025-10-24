@@ -1,20 +1,30 @@
-# @livefire2015/solid-ag-chat v1
+# @livefire2015/solid-ag-chat v2
 
-**SolidJS library** for building chat UIs with official **AG-UI protocol** support.
+**SolidJS library** for building chat UIs with official **AG-UI protocol** support and **bidirectional tool execution**.
 
 [![npm version](https://badge.fury.io/js/@livefire2015%2Fsolid-ag-chat.svg)](https://www.npmjs.com/package/@livefire2015/solid-ag-chat)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## What's New in V2
+
+🎉 **Bidirectional Tool Execution** - Frontend-defined tools with automatic execution:
+- 🔧 **Frontend Tool Registration** - Define tools with handlers in your React components
+- ⚡ **Automatic Execution** - Tools execute automatically when agent requests them
+- 🔄 **Resume on Result** - Agent continues after tool execution completes
+- 📊 **Execution Tracking** - Monitor tool state with reactive hooks
+- 🎯 **Human-in-the-Loop** - Perfect for user confirmations, data fetching, UI navigation
 
 ## What This Library Provides
 
 This is a **library** - not a ready-to-use chat UI. It provides:
 - ✅ **SolidJS Primitives** - Provider, hooks for building custom chat UIs
 - ✅ **Official AG-UI SDK Client** - Stateless agent execution with streaming
+- ✅ **Bidirectional Tool Execution** - Frontend tools with automatic execution (V2)
 - ✅ **Reactive State Management** - Client-side state with conversation context
 - ✅ **Type Safety** - Full TypeScript types for AG-UI protocol
 - ✅ **Mock Client** - Testing infrastructure included
 
-**You build the UI** - This library handles the protocol, state, and reactivity.
+**You build the UI** - This library handles the protocol, state, reactivity, and tool execution.
 
 ## AG-UI Protocol Overview
 
@@ -152,6 +162,137 @@ function YourChatUI() {
 }
 ```
 
+## Bidirectional Tool Execution (V2)
+
+V2 introduces **frontend-defined tools** that execute automatically when the agent requests them.
+
+### How It Works
+
+1. **Define Tools** in ChatProvider with handler functions
+2. **Agent Requests Tool** via TOOL_CALL_START/ARGS/END events
+3. **Frontend Executes** tool handler automatically
+4. **Result Sent Back** to agent as tool message
+5. **Agent Resumes** execution with the tool result
+
+### Example: User Confirmation Tool
+
+```tsx
+import { ChatProvider, createSdkAgent } from '@livefire2015/solid-ag-chat';
+import type { ToolHandler, RegisteredTool } from '@livefire2015/solid-ag-chat';
+
+function App() {
+  const client = createSdkAgent({ baseUrl: 'http://localhost:8000' });
+
+  // Define a confirmation tool
+  const confirmActionTool: RegisteredTool = {
+    tool: {
+      name: 'confirmAction',
+      description: 'Ask the user to confirm a specific action before proceeding',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'The action that needs user confirmation'
+          },
+          importance: {
+            type: 'string',
+            enum: ['low', 'medium', 'high', 'critical'],
+            description: 'The importance level of the action'
+          }
+        },
+        required: ['action']
+      }
+    },
+    handler: async (args) => {
+      // Show confirmation dialog to user
+      const confirmed = window.confirm(`Confirm: ${args.action}?`);
+      return confirmed ? 'approved' : 'rejected';
+    }
+  };
+
+  return (
+    <ChatProvider client={client} tools={[confirmActionTool]}>
+      <YourChatUI />
+    </ChatProvider>
+  );
+}
+```
+
+### Tool Registration Patterns
+
+**Provider-Level Tools** (Available to all conversations):
+
+```tsx
+<ChatProvider client={client} tools={[tool1, tool2]}>
+  <App />
+</ChatProvider>
+```
+
+**Per-Message Tools** (Additive to provider tools):
+
+```tsx
+const { send } = useConversation();
+
+// Send with additional tools
+await send('Deploy to production', {
+  tools: [deploymentTool]  // Merged with provider tools
+});
+```
+
+### Tool Execution Hooks
+
+Monitor tool execution state in your UI:
+
+```tsx
+import { useToolCalls, useToolExecution, usePendingTools } from '@livefire2015/solid-ag-chat';
+
+function ToolMonitor() {
+  // Get all tool calls for current conversation
+  const { toolCalls, pendingExecutions, hasPendingTools } = useToolCalls();
+
+  // Monitor specific tool execution
+  const { status, result, error, isExecuting } = useToolExecution(toolCallId);
+
+  // Get pending tools queue
+  const { pending, next, count } = usePendingTools();
+
+  return (
+    <Show when={hasPendingTools()}>
+      <div class="tool-status">
+        Executing {count()} tools...
+      </div>
+    </Show>
+  );
+}
+```
+
+### Complete Example: Data Fetching Tool
+
+```tsx
+const userDataTool: RegisteredTool = {
+  tool: {
+    name: 'fetchUserData',
+    description: 'Retrieve data about a specific user',
+    parameters: {
+      type: 'object',
+      properties: {
+        userId: {
+          type: 'string',
+          description: 'ID of the user to fetch'
+        }
+      },
+      required: ['userId']
+    }
+  },
+  handler: async (args) => {
+    const response = await fetch(`/api/users/${args.userId}`);
+    const data = await response.json();
+    return JSON.stringify(data);
+  }
+};
+```
+
 ## API Reference
 
 ### ChatProvider
@@ -161,6 +302,7 @@ Provides AG-UI client and reactive state to all children.
 ```typescript
 interface ChatProviderProps {
   client: AgUiClient;              // Required: AG-UI client instance
+  tools?: RegisteredTool[];        // V2: Provider-level tools (optional)
   upload?: (files: File[]) => Promise<AttachmentDoc[]>;  // Optional: file upload handler
   sessionId?: string;              // Optional: session identifier
   initialConversationId?: string;  // Optional: initial conversation to load
