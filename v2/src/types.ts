@@ -145,6 +145,36 @@ export interface ToolDefinition {
   outputSchema?: unknown;
 }
 
+// =============================================================================
+// V2: Bidirectional Tool Execution
+// =============================================================================
+
+// Tool handler function type - executes tool and returns string result
+export type ToolHandler = (args: Record<string, any>) => Promise<string>;
+
+// Tool execution state
+export type ToolExecutionStatus = 'pending' | 'executing' | 'completed' | 'failed';
+
+// Tool execution tracking
+export interface ToolExecution {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+  conversationId: string;
+  messageId: string;
+  status: ToolExecutionStatus;
+  result?: string;
+  error?: Error;
+  startedAt?: number;
+  completedAt?: number;
+}
+
+// Tool registration
+export interface RegisteredTool {
+  tool: import('@ag-ui/core').Tool;
+  handler: ToolHandler;
+}
+
 // MCP Server reference (custom extension)
 export interface McpServerRef {
   name: string;
@@ -274,6 +304,7 @@ export interface AgUiClient {
     options?: {
       attachments?: Id[];
       metadata?: Record<string, unknown>;
+      tools?: import('@ag-ui/core').Tool[]; // V2: Pass tools for this message
       onEvent?: (event: { type: string; data: any }) => void;
     }
   ): Promise<Message>;
