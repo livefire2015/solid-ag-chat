@@ -196,6 +196,7 @@ export class SdkAgClient implements AgUiClient {
     options?: {
       attachments?: Id[];
       metadata?: Record<string, unknown>;
+      tools?: import('@ag-ui/core').Tool[]; // V2: Tools for bidirectional execution
       onEvent?: (event: { type: string; data: any }) => void;
     }
   ): Promise<MessageDoc> {
@@ -232,7 +233,7 @@ export class SdkAgClient implements AgUiClient {
       runId: `run_${crypto.randomUUID()}`,
       state: {},
       messages: [...this.conversationHistory],
-      tools: [],
+      tools: options?.tools || [], // V2: Pass tools from options
       context: [],
       forwardedProps: options?.metadata || {},
     };
@@ -393,6 +394,169 @@ export class SdkAgClient implements AgUiClient {
 
     // 3. Emit canceled event
     this.emit('message.canceled', { messageId });
+  }
+
+  /**
+   * V2: Send tool result back to agent to resume execution
+   * This implements the bidirectional tool execution pattern:
+   * 1. Agent emits TOOL_CALL_START/ARGS/END
+   * 2. Frontend executes tool
+   * 3. Frontend calls sendToolResult with the result
+   * 4. Result is added to conversation history as tool message
+   * 5. Agent continues execution with the tool result
+   */
+  async sendToolResult(
+    conversationId: Id,
+    toolCallId: string,
+    result: string,
+    options?: {
+      tools?: import('@ag-ui/core').Tool[];
+      metadata?: Record<string, unknown>;
+      onEvent?: (event: { type: string; data: any }) => void;
+    }
+  ): Promise<void> {
+    const threadId = conversationId || this.threadId!;
+
+    // Create tool result message
+    const toolMessage: Message = {
+      id: `msg_${crypto.randomUUID()}`,
+      role: 'tool',
+      content: result,
+      toolCallId,
+    };
+
+    // Add to conversation history
+    this.conversationHistory.push(toolMessage);
+
+    // Emit tool result message created
+    const toolMessageDoc: MessageDoc = {
+      ...toolMessage,
+      conversationId: threadId,
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+    };
+    this.emit('message.created', { message: toolMessageDoc });
+
+    // Resume agent execution with tool result in context
+    // Prepare RunAgentInput with full history including tool result
+    const input: RunAgentInput = {
+      threadId,
+      runId: `run_${crypto.randomUUID()}`,
+      state: {},
+      messages: [...this.conversationHistory],
+      tools: options?.tools || [],
+      context: [],
+      forwardedProps: options?.metadata || {},
+    };
+
+    try {
+      let assistantMessageId: string | null = null;
+
+      // Run agent and subscribe to events
+      const subscription = this.agent.run(input).subscribe({
+        next: (event: any) => {
+          // Accumulate streaming content for conversation history
+          if (event.type === 'TEXT_MESSAGE_START') {
+            assistantMessageId = event.messageId;
+            this.streamingContent.set(event.messageId, '');
+            this.streamingToolCalls.set(event.messageId, []);
+          }
+
+          if (event.type === 'TEXT_MESSAGE_CONTENT') {
+            const current = this.streamingContent.get(event.messageId) || '';
+            this.streamingContent.set(event.messageId, current + (event.delta || ''));
+          }
+
+          // Accumulate tool calls
+          if (event.type === 'TOOL_CALL_START') {
+            this.toolCallsInProgress.set(event.toolCallId, {
+              id: event.toolCallId,
+              name: event.toolName,
+              args: '',
+              messageId: event.messageId,
+            });
+          }
+
+          if (event.type === 'TOOL_CALL_ARGS') {
+            const tc = this.toolCallsInProgress.get(event.toolCallId);
+            if (tc) {
+              tc.args += event.delta || '';
+            }
+          }
+
+          if (event.type === 'TOOL_CALL_END') {
+            const tc = this.toolCallsInProgress.get(event.toolCallId);
+            if (tc) {
+              const toolCalls = this.streamingToolCalls.get(tc.messageId) || [];
+              toolCalls.push({
+                id: tc.id,
+                type: 'function',
+                function: {
+                  name: tc.name,
+                  arguments: tc.args,
+                },
+              });
+              this.streamingToolCalls.set(tc.messageId, toolCalls);
+              this.toolCallsInProgress.delete(event.toolCallId);
+            }
+          }
+
+          if (event.type === 'TEXT_MESSAGE_END') {
+            // Push complete assistant message to history
+            const assistantMessage: Message = {
+              id: event.messageId,
+              role: 'assistant',
+              content: this.streamingContent.get(event.messageId) || '',
+            };
+
+            const toolCalls = this.streamingToolCalls.get(event.messageId);
+            if (toolCalls && toolCalls.length > 0) {
+              assistantMessage.toolCalls = toolCalls;
+            }
+
+            this.conversationHistory.push(assistantMessage);
+
+            this.streamingContent.delete(event.messageId);
+            this.streamingToolCalls.delete(event.messageId);
+          }
+
+          // Forward events
+          options?.onEvent?.({ type: event.type, data: event });
+          this.emit(event.type, event);
+        },
+        error: (error: Error) => {
+          console.error('Agent error after tool result:', error);
+
+          if (assistantMessageId) {
+            this.streamingContent.delete(assistantMessageId);
+            this.streamingToolCalls.delete(assistantMessageId);
+            this.activeSubscriptions.delete(toolMessage.id);
+          }
+
+          for (const [id, tc] of this.toolCallsInProgress.entries()) {
+            if (tc.messageId === assistantMessageId) {
+              this.toolCallsInProgress.delete(id);
+            }
+          }
+
+          this.emit('message.errored', {
+            messageId: toolMessage.id,
+            error: { code: 'AGENT_ERROR', message: error.message },
+          });
+        },
+        complete: () => {
+          this.activeSubscriptions.delete(toolMessage.id);
+        },
+      });
+
+      this.activeSubscriptions.set(toolMessage.id, subscription);
+    } catch (error: any) {
+      this.emit('message.errored', {
+        messageId: toolMessage.id,
+        error: { code: 'TOOL_RESULT_ERROR', message: error.message },
+      });
+      throw error;
+    }
   }
 
   close(): void {
