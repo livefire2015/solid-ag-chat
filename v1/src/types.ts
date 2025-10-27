@@ -105,6 +105,7 @@ export type Message = AgMessage & {
 
   // Official AG-UI fields (explicitly added for compatibility)
   toolCalls?: AgToolCall[]; // Tool calls in assistant messages
+  toolCallId?: Id; // Tool call ID for tool result messages (role === 'tool')
 
   // NOTE: Official AG-UI uses 'content' (string) and 'toolCalls' (ToolCall[])
   // No more parts[] - multimodal content is handled via official Message structure
