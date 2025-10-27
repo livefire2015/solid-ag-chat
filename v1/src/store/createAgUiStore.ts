@@ -115,12 +115,12 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   // Official AG-UI events for tool calls
   client.on('TOOL_CALL_START', (payload) => {
-    const { messageId, toolCallId, toolName } = payload as any;
+    const { parentMessageId, toolCallId, toolCallName } = payload as any;
     setState('toolCallsInProgress', toolCallId, {
       id: toolCallId,
-      name: toolName,
+      name: toolCallName,
       args: '',
-      messageId,
+      messageId: parentMessageId,
     });
   });
 
