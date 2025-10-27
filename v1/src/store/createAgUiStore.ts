@@ -116,6 +116,29 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   // Official AG-UI events for tool calls
   client.on('TOOL_CALL_START', (payload) => {
     const { parentMessageId, toolCallId, toolCallName } = payload as any;
+
+    // Auto-create parent message if it doesn't exist
+    // (PydanticAI's handle_ag_ui_request doesn't send TEXT_MESSAGE_START for tool-calling messages)
+    if (!state.messages[parentMessageId]) {
+      console.log('[TOOL_CALL_START] Creating implicit parent message', parentMessageId);
+      const parentMessage = {
+        id: parentMessageId,
+        role: 'assistant' as const,
+        content: '',
+        conversationId: state.activeConversationId,
+        status: 'completed' as const,
+        createdAt: new Date().toISOString(),
+      };
+      setState('messages', parentMessageId, parentMessage);
+
+      // Add to conversation's message list
+      if (parentMessage.conversationId) {
+        setState('messagesByConversation', parentMessage.conversationId, (arr = []) =>
+          arr.includes(parentMessageId) ? arr : [...arr, parentMessageId]
+        );
+      }
+    }
+
     setState('toolCallsInProgress', toolCallId, {
       id: toolCallId,
       name: toolCallName,
@@ -132,6 +155,13 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   client.on('TOOL_CALL_END', (payload) => {
     const { toolCallId } = payload as any;
     const tc = state.toolCallsInProgress[toolCallId];
+    console.log('[TOOL_CALL_END] Received', {
+      toolCallId,
+      toolCallInProgress: tc,
+      messageExists: tc ? !!state.messages[tc.messageId] : false,
+      allMessages: Object.keys(state.messages)
+    });
+
     if (tc) {
       const msg = state.messages[tc.messageId];
       if (msg) {
@@ -143,9 +173,51 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
             arguments: tc.args,
           },
         };
-        setState('messages', tc.messageId, 'toolCalls', (arr = []) => [...arr, toolCall]);
+        console.log('[TOOL_CALL_END] Adding toolCall to message', tc.messageId, toolCall);
+        setState('messages', tc.messageId, 'toolCalls', (arr = []) => {
+          const updated = [...arr, toolCall];
+          console.log('[TOOL_CALL_END] Updated toolCalls array', updated);
+          return updated;
+        });
+        console.log('[TOOL_CALL_END] Message after update', state.messages[tc.messageId]);
+      } else {
+        console.error('[TOOL_CALL_END] Message not found for ID:', tc.messageId);
       }
       setState('toolCallsInProgress', toolCallId, undefined!);
+    } else {
+      console.error('[TOOL_CALL_END] No tool call in progress for ID:', toolCallId);
+    }
+  });
+
+  // Handle tool result messages
+  client.on('TOOL_CALL_RESULT', (payload) => {
+    const { messageId, toolCallId, content, role } = payload as any;
+
+    // Find parent message to get conversationId
+    const parentMessage = Object.values(state.messages).find(m =>
+      m.toolCalls?.some(tc => tc.id === toolCallId)
+    );
+    const conversationId = parentMessage?.conversationId || state.activeConversationId;
+
+    // Create tool result message
+    const toolMessage = {
+      id: messageId,
+      role: role || 'tool',  // Should be "tool"
+      content: content || '',
+      toolCallId: toolCallId,
+      conversationId: conversationId,
+      status: 'completed' as const,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Add to messages
+    setState('messages', messageId, toolMessage);
+
+    // Add to conversation's message list
+    if (toolMessage.conversationId) {
+      setState('messagesByConversation', toolMessage.conversationId, (arr = []) =>
+        arr.includes(messageId) ? arr : [...arr, messageId]
+      );
     }
   });
 
