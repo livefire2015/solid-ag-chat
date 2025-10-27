@@ -293,6 +293,198 @@ const userDataTool: RegisteredTool = {
 };
 ```
 
+### Complete SolidJS Examples
+
+Here are three complete examples demonstrating real-world tool usage patterns with SolidJS.
+
+#### Example 1: Todo List State Management
+
+This example shows how a tool can interact with SolidJS signals to manage component state. The agent can add items to a todo list that is rendered by your component.
+
+```tsx
+import { render } from 'solid-js/web';
+import { createSignal, For } from 'solid-js';
+import { ChatProvider, createSdkAgent, useConversation } from '@livefire2015/solid-ag-chat';
+import type { RegisteredTool } from '@livefire2015/solid-ag-chat';
+
+// Mock client for demonstration
+const client = createSdkAgent({ baseUrl: 'http://localhost:8000' });
+
+function TodoApp() {
+  // 1. Define component state with a SolidJS signal
+  const [todos, setTodos] = createSignal<string[]>(['Learn SolidJS']);
+
+  // 2. Define the frontend tool
+  // The handler closes over the 'setTodos' signal setter
+  const addTodoTool: RegisteredTool = {
+    tool: {
+      name: 'addTodoItem',
+      description: 'Add a new todo item to the list for the user to see.',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'The content of the todo item.',
+          },
+        },
+        required: ['text'],
+      },
+    },
+    handler: async ({ text }) => {
+      // 3. Update the component's state
+      setTodos(prevTodos => [...prevTodos, text]);
+      // 4. Return a result to the agent
+      return `Successfully added "${text}" to the list.`;
+    },
+  };
+
+  // The main App component that provides context
+  const App = () => (
+    <ChatProvider client={client} tools={[addTodoTool]}>
+      <h1>Todo List</h1>
+      <ul>
+        <For each={todos()}>{(todo, i) => <li>{todo}</li>}</For>
+      </ul>
+      <hr />
+      <ChatBox />
+    </ChatProvider>
+  );
+
+  // A simple chat component to interact with the agent
+  const ChatBox = () => {
+    const { send } = useConversation();
+    let inputRef: HTMLInputElement;
+
+    const handleSubmit = (e: Event) => {
+      e.preventDefault();
+      if (inputRef.value) {
+        // The agent can now call 'addTodoItem'
+        send(inputRef.value);
+        inputRef.value = '';
+      }
+    };
+
+    return (
+      <form onSubmit={handleSubmit}>
+        <input ref={inputRef!} placeholder="Try 'add a new todo to buy milk'" style={{width: "300px"}} />
+        <button type="submit">Send</button>
+      </form>
+    );
+  };
+
+  render(() => <App />, document.getElementById('app')!);
+}
+
+// To run this, you would have an index.html with <div id="app"></div>
+// and call TodoApp();
+```
+
+#### Example 2: User Confirmation Dialog
+
+This example demonstrates a "human-in-the-loop" workflow. The agent must ask for user confirmation via a browser dialog before it can proceed with a critical action.
+
+```tsx
+import { render } from 'solid-js/web';
+import { ChatProvider, createSdkAgent } from '@livefire2015/solid-ag-chat';
+import type { RegisteredTool } from '@livefire2015/solid-ag-chat';
+
+const client = createSdkAgent({ baseUrl: 'http://localhost:8000' });
+
+// Define a tool that requires user interaction
+const confirmActionTool: RegisteredTool = {
+  tool: {
+    name: 'confirmAction',
+    description: 'Ask the user for confirmation before performing a critical action.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          description: 'A description of the action that requires confirmation.',
+        },
+      },
+      required: ['action'],
+    },
+  },
+  handler: async ({ action }) => {
+    // Use a browser API to get user input
+    const isConfirmed = window.confirm(`Please confirm this action: ${action}`);
+
+    // Return the user's choice to the agent
+    return isConfirmed ? 'User approved.' : 'User rejected.';
+  },
+};
+
+function ConfirmationApp() {
+  return (
+    <ChatProvider client={client} tools={[confirmActionTool]}>
+      {/* Your Chat UI components go here */}
+      {/* When the user asks the agent to do something critical, */}
+      {/* like "delete my account", the agent can call this tool. */}
+    </ChatProvider>
+  );
+}
+
+// render(() => <ConfirmationApp />, document.getElementById('app')!);
+```
+
+#### Example 3: Frontend Data Fetching
+
+This example shows how a tool can fetch data from a third-party API directly from the frontend. This is useful when the frontend has access to authentication tokens or a specific network environment that the backend agent doesn't.
+
+```tsx
+import { render } from 'solid-js/web';
+import { ChatProvider, createSdkAgent } from '@livefire2015/solid-ag-chat';
+import type { RegisteredTool } from '@livefire2015/solid-ag-chat';
+
+const client = createSdkAgent({ baseUrl: 'http://localhost:8000' });
+
+// Define a tool that fetches data from a public API
+const stockPriceTool: RegisteredTool = {
+  tool: {
+    name: 'getStockPrice',
+    description: 'Gets the current price of a stock symbol.',
+    parameters: {
+      type: 'object',
+      properties: {
+        symbol: {
+          type: 'string',
+          description: 'The stock ticker symbol, e.g., "AAPL".',
+        },
+      },
+      required: ['symbol'],
+    },
+  },
+  handler: async ({ symbol }) => {
+    try {
+      // Fetch data from an external API
+      const response = await fetch(`https://api.example.com/stocks/${symbol}`);
+      if (!response.ok) {
+        return `Error fetching data for ${symbol}.`;
+      }
+      const data = await response.json();
+
+      // Return a structured result as a string
+      return `The price of ${symbol} is ${data.price}.`;
+    } catch (error) {
+      return `An error occurred: ${error.message}`;
+    }
+  },
+};
+
+function DataFetchingApp() {
+  return (
+    <ChatProvider client={client} tools={[stockPriceTool]}>
+      {/* Your Chat UI components go here */}
+      {/* The user can now ask "what is the price of GOOG?" */}
+    </ChatProvider>
+  );
+}
+
+// render(() => <DataFetchingApp />, document.getElementById('app')!);
+```
+
 ## API Reference
 
 ### ChatProvider
