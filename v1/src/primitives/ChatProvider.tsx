@@ -1,4 +1,4 @@
-import { createContext, useContext, JSX } from 'solid-js';
+import { createContext, useContext, JSX, onMount } from 'solid-js';
 import type { AgUiClient, AttachmentDoc } from '../types';
 import { createAgUiStore, AgUiStore } from '../store/createAgUiStore';
 
@@ -27,6 +27,18 @@ export function ChatProvider(props: ChatProviderProps) {
     sessionId: props.sessionId,
     initialConversationId: props.initialConversationId,
   };
+
+  // Initialize store on mount
+  onMount(async () => {
+    // Load conversations from backend
+    await store.loadConversations();
+
+    // If initialConversationId provided, set as active and load messages
+    if (props.initialConversationId) {
+      store.setActiveConversation(props.initialConversationId);
+      await store.loadMessages(props.initialConversationId);
+    }
+  });
 
   return (
     <ChatContext.Provider value={contextValue}>
