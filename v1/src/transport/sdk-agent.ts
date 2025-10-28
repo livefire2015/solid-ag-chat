@@ -27,7 +27,7 @@ export class SdkAgClient implements AgUiClient {
 
   // Client-side state management
   private threadId: string | null = null;
-  private conversationHistory: Message[] = [];
+  private conversationHistoryByThread = new Map<string, Message[]>();
 
   // Streaming content accumulation (messageId -> accumulated content)
   private streamingContent = new Map<string, string>();
@@ -113,7 +113,7 @@ export class SdkAgClient implements AgUiClient {
 
     // Set as active thread
     this.threadId = conv.id;
-    this.conversationHistory = [];
+    this.conversationHistoryByThread.set(conv.id, []);
 
     // Emit event for store
     this.emit('conversation.created', { conversation: conv });
@@ -187,6 +187,25 @@ export class SdkAgClient implements AgUiClient {
   }
 
   // ============================================================================
+  // Conversation State Management
+  // ============================================================================
+
+  /**
+   * Set the active thread/conversation
+   * This should be called when switching conversations to ensure proper context
+   */
+  setActiveThread(threadId: string): void {
+    this.threadId = threadId;
+
+    // Initialize history Map for this conversation if it doesn't exist
+    if (!this.conversationHistoryByThread.has(threadId)) {
+      this.conversationHistoryByThread.set(threadId, []);
+    }
+
+    console.log(`Set active thread to ${threadId}`);
+  }
+
+  // ============================================================================
   // Message Handling (SDK Agent Pattern)
   // ============================================================================
 
@@ -207,31 +226,36 @@ export class SdkAgClient implements AgUiClient {
 
     const threadId = conversationId || this.threadId!;
 
-    // Create user message
+    // Get or create conversation-specific history
+    const conversationHistory = this.conversationHistoryByThread.get(threadId) || [];
+
+    // Create user message with timestamp for proper ordering
+    const timestamp = new Date().toISOString();
     const userMessage: Message = {
       id: `msg_${crypto.randomUUID()}`,
       role: 'user',
       content: text,
     };
 
-    // Add to history
-    this.conversationHistory.push(userMessage);
+    // Add to conversation's history
+    conversationHistory.push(userMessage);
+    this.conversationHistoryByThread.set(threadId, conversationHistory);
 
-    // Emit user message created
+    // Emit user message created (reuse same timestamp for consistency)
     const userMessageDoc: MessageDoc = {
       ...userMessage,
       conversationId: threadId,
       status: 'completed',
-      createdAt: new Date().toISOString(),
+      createdAt: timestamp,
     };
     this.emit('message.created', { message: userMessageDoc });
 
-    // Prepare RunAgentInput
+    // Prepare RunAgentInput with conversation-specific history
     const input: RunAgentInput = {
       threadId,
       runId: `run_${crypto.randomUUID()}`,
       state: {},
-      messages: [...this.conversationHistory],
+      messages: [...conversationHistory],
       tools: [],
       context: [],
       forwardedProps: options?.metadata || {},
@@ -303,18 +327,41 @@ export class SdkAgClient implements AgUiClient {
               assistantMessage.toolCalls = toolCalls;
             }
 
-            this.conversationHistory.push(assistantMessage);
+            // Add to conversation-specific history
+            const history = this.conversationHistoryByThread.get(threadId) || [];
+            history.push(assistantMessage);
+            this.conversationHistoryByThread.set(threadId, history);
 
             // Cleanup streaming state
             this.streamingContent.delete(event.messageId);
             this.streamingToolCalls.delete(event.messageId);
           }
 
+          // Handle tool result messages - add them to conversation history
+          // These provide context about tool executions without resending tool_use blocks
+          if (event.type === 'TOOL_CALL_RESULT') {
+            const toolResultMessage: Message = {
+              id: event.messageId,
+              role: 'tool',
+              content: event.content || '',
+              toolCallId: event.toolCallId,
+            };
+
+            // Add to conversation-specific history
+            const history = this.conversationHistoryByThread.get(threadId) || [];
+            history.push(toolResultMessage);
+            this.conversationHistoryByThread.set(threadId, history);
+
+            console.log(`Added tool result message ${event.messageId} for tool call ${event.toolCallId} to conversation ${threadId} history`);
+          }
+
           // Forward to external handler
           options?.onEvent?.({ type: event.type, data: event });
 
-          // Emit to internal listeners for store
-          this.emit(event.type, event);
+          // Emit to internal listeners for store with conversation context
+          // Add conversationId to event so store can associate messages correctly
+          const enrichedEvent = { ...event, conversationId: threadId };
+          this.emit(event.type, enrichedEvent);
         },
         error: (error: Error) => {
           console.error('Agent error:', error);
@@ -362,6 +409,47 @@ export class SdkAgClient implements AgUiClient {
     }
   }
 
+  /**
+   * Sync loaded messages to the conversation history Map
+   * This ensures the SDK client has the full history when sending new messages
+   *
+   * IMPORTANT: We exclude tool calls from the synced history because:
+   * - Tool calls are stored for UI display only
+   * - When sent back to the API, they would create duplicate tool_use IDs
+   * - The API reconstructs tool interactions from tool result messages
+   */
+  private syncMessagesToHistory(conversationId: string, messages: MessageDoc[]) {
+    const history: Message[] = messages.map(msg => {
+      // Handle tool messages specially (they require toolCallId)
+      if (msg.role === 'tool') {
+        const toolMessage: Message = {
+          id: msg.id,
+          role: 'tool',
+          content: msg.content,
+          toolCallId: msg.toolCallId || '',
+        };
+        return toolMessage;
+      }
+
+      // For other message types
+      const message: Message = {
+        id: msg.id,
+        role: msg.role as any,
+        content: msg.content,
+      };
+
+      // DO NOT include tool calls in the history that will be sent to the API
+      // Tool calls are only for display in the UI
+      // The API will reject requests with duplicate tool_use IDs
+
+      return message;
+    });
+
+    // Update the conversation history Map
+    this.conversationHistoryByThread.set(conversationId, history);
+    console.log(`Synced ${history.length} messages to conversation ${conversationId} history`);
+  }
+
   async getMessages(conversationId: Id): Promise<MessageDoc[]> {
     const endpoint = `${this.conversationsEndpoint}/${conversationId}/messages`;
     const res = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -375,7 +463,14 @@ export class SdkAgClient implements AgUiClient {
     }
 
     const data = await res.json();
-    return data.messages || [];
+    const messages = data.messages || [];
+
+    // Sync loaded messages to conversation history Map
+    if (messages.length > 0) {
+      this.syncMessagesToHistory(conversationId, messages);
+    }
+
+    return messages;
   }
 
   async cancelMessage(conversationId: Id, messageId: Id): Promise<void> {
@@ -407,7 +502,7 @@ export class SdkAgClient implements AgUiClient {
 
     // Clear other state
     this.listeners.clear();
-    this.conversationHistory = [];
+    this.conversationHistoryByThread.clear();
     this.threadId = null;
   }
 }
