@@ -12,6 +12,7 @@ export interface AgUiStore {
   loadConversations: () => Promise<void>;
   createConversation: (title?: string, metadata?: Record<string, unknown>) => Promise<ConversationDoc>;
   setActiveConversation: (id: Id) => void;
+  updateConversation: (id: Id, updates: Partial<ConversationDoc>) => Promise<ConversationDoc>;
   archiveConversation: (id: Id) => Promise<void>;
 
   // Message management
@@ -253,6 +254,10 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     }
   };
 
+  const updateConversation = async (id: Id, updates: Partial<ConversationDoc>) => {
+    return await client.updateConversation(id, updates);
+  };
+
   const archiveConversation = async (id: Id) => {
     await client.archiveConversation(id);
   };
@@ -306,6 +311,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     loadConversations,
     createConversation,
     setActiveConversation,
+    updateConversation,
     archiveConversation,
     loadMessages,
     sendMessage,
