@@ -1,6 +1,6 @@
 {
   "name": "@livefire2015/solid-ag-chat",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "SolidJS chat components with official AG-UI protocol support",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -50,8 +50,12 @@
   "dependencies": {
     "@ag-ui/client": "^0.0.39",
     "@ag-ui/core": "^0.0.39",
+    "@tailwindcss/typography": "^0.5.19",
     "fast-json-patch": "^3.1.1",
-    "rxjs": "^7.8.1"
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "rxjs": "^7.8.1",
+    "solid-markdown": "^2.0.14"
   },
   "repository": {
     "type": "git",
