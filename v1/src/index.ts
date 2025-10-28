@@ -99,6 +99,12 @@ export type {
 } from './primitives';
 
 // ============================================================================
+// UI Components
+// ============================================================================
+export { MessageRenderer } from './components';
+export type { MessageRendererProps } from './components';
+
+// ============================================================================
 // Testing Utilities
 // ============================================================================
 export type { MockClientOptions } from './testing/mockClient';
