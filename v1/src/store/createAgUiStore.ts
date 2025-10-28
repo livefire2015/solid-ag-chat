@@ -73,7 +73,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
       id: p.messageId,
       role: p.role || 'assistant',
       content: '',
-      conversationId: state.activeConversationId,
+      conversationId: p.conversationId || state.activeConversationId,
       status: 'streaming' as const,
       createdAt: new Date().toISOString(),
     };
@@ -115,7 +115,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   // Official AG-UI events for tool calls
   client.on('TOOL_CALL_START', (payload) => {
-    const { parentMessageId, toolCallId, toolCallName } = payload as any;
+    const { parentMessageId, toolCallId, toolCallName, conversationId } = payload as any;
 
     // Auto-create parent message if it doesn't exist
     // (PydanticAI's handle_ag_ui_request doesn't send TEXT_MESSAGE_START for tool-calling messages)
@@ -125,7 +125,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
         id: parentMessageId,
         role: 'assistant' as const,
         content: '',
-        conversationId: state.activeConversationId,
+        conversationId: conversationId || state.activeConversationId,
         status: 'completed' as const,
         createdAt: new Date().toISOString(),
       };
@@ -246,6 +246,11 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   const setActiveConversation = (id: Id) => {
     setState('activeConversationId', id);
+
+    // Also set active thread in SDK client if supported
+    if (client.setActiveThread) {
+      client.setActiveThread(id);
+    }
   };
 
   const archiveConversation = async (id: Id) => {
@@ -254,6 +259,11 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   // Message management methods
   const loadMessages = async (conversationId: Id) => {
+    // Set active thread when loading messages for a conversation
+    if (client.setActiveThread) {
+      client.setActiveThread(conversationId);
+    }
+
     const messages = await client.getMessages(conversationId);
     messages.forEach(m => {
       setState('messages', m.id, m);
@@ -272,7 +282,18 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
       metadata?: Record<string, unknown>;
     }
   ) => {
+    // If no conversation ID provided and no active conversation, wait for auto-creation
+    if (!conversationId && !state.activeConversationId) {
+      console.log('[sendMessage] No conversation provided, will auto-create');
+    }
+
     await client.sendMessage(conversationId, text, options);
+
+    // After sending, ensure active conversation is set if it was auto-created
+    // The conversation.created event should have already set this, but double-check
+    if (!conversationId && !state.activeConversationId) {
+      console.warn('[sendMessage] Conversation was created but activeConversationId not set');
+    }
   };
 
   const cancelMessage = async (conversationId: Id, messageId: Id) => {
