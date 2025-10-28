@@ -267,6 +267,7 @@ export interface AgUiClient {
   getConversation(id: Id): Promise<ConversationDoc>;
   updateConversation(id: Id, updates: Partial<ConversationDoc>): Promise<ConversationDoc>;
   archiveConversation(id: Id): Promise<void>;
+  setActiveThread?(threadId: string): void; // Set the active conversation thread for SDK client
 
   // Message management (uses extended Messages with conversation context)
   sendMessage(
