@@ -37,10 +37,10 @@ export function ChatProvider(props: ChatProviderProps) {
     // Load conversations from backend
     await store.loadConversations();
 
-    // If initialConversationId provided, set as active and load messages
+    // If initialConversationId provided, set as active
+    // Note: useConversation will auto-load messages via its autoLoad effect
     if (props.initialConversationId) {
       store.setActiveConversation(props.initialConversationId);
-      await store.loadMessages(props.initialConversationId);
     }
   });
 
