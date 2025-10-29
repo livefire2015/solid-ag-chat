@@ -41,10 +41,18 @@ export function useConversation(
     if (!cid) return [];
 
     const messageIds = ctx.state.messagesByConversation[cid] || [];
-    return messageIds
+    console.log('[useConversation.messages] messageIds from state:', messageIds);
+
+    const mappedMessages = messageIds
       .map(mid => ctx.state.messages[mid])
-      .filter(Boolean)
-      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+      .filter(Boolean);
+    console.log('[useConversation.messages] mapped message count:', mappedMessages.length);
+    console.log('[useConversation.messages] mapped message IDs:', mappedMessages.map(m => m.id));
+
+    const sorted = mappedMessages.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    console.log('[useConversation.messages] final sorted count:', sorted.length);
+
+    return sorted;
   });
 
   const isStreaming = createMemo(() => {
@@ -62,10 +70,14 @@ export function useConversation(
   const send = async (text: string, opts?: { attachments?: Id[] }) => {
     const cid = conversationId();
 
+    console.log('[useConversation.send] Called with text:', text, 'conversationId:', cid);
+
     // Allow sending without conversation (will auto-create via SDK)
     await ctx.sendMessage(cid || null, text, {
       attachments: opts?.attachments,
     });
+
+    console.log('[useConversation.send] Completed');
   };
 
   const cancel = async (messageId: Id) => {

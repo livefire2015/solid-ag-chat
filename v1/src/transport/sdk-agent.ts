@@ -218,13 +218,18 @@ export class SdkAgClient implements AgUiClient {
       onEvent?: (event: { type: string; data: any }) => void;
     }
   ): Promise<MessageDoc> {
+    console.log('[SdkAgClient.sendMessage] Called with text:', text, 'conversationId:', conversationId, 'threadId:', this.threadId);
+
     // Auto-create conversation if needed
     if (!conversationId && !this.threadId) {
+      console.log('[SdkAgClient.sendMessage] Auto-creating conversation');
       const conv = await this.createConversation();
       conversationId = conv.id;
+      console.log('[SdkAgClient.sendMessage] Created conversation:', conversationId);
     }
 
     const threadId = conversationId || this.threadId!;
+    console.log('[SdkAgClient.sendMessage] Using threadId:', threadId);
 
     // Get or create conversation-specific history
     const conversationHistory = this.conversationHistoryByThread.get(threadId) || [];
@@ -264,6 +269,8 @@ export class SdkAgClient implements AgUiClient {
     try {
       let assistantMessageId: string | null = null;
 
+      console.log('[SdkAgClient.sendMessage] Calling this.agent.run() with runId:', input.runId);
+
       // Run agent and subscribe to events
       const subscription = this.agent.run(input).subscribe({
         next: (event: any) => {
@@ -297,19 +304,32 @@ export class SdkAgClient implements AgUiClient {
           }
 
           if (event.type === 'TOOL_CALL_END') {
+            console.log('[SdkAgClient] TOOL_CALL_END event received for toolCallId:', event.toolCallId);
             const tc = this.toolCallsInProgress.get(event.toolCallId);
             if (tc) {
               const toolCalls = this.streamingToolCalls.get(tc.messageId) || [];
-              toolCalls.push({
-                id: tc.id,
-                type: 'function',
-                function: {
-                  name: tc.name,
-                  arguments: tc.args,
-                },
-              });
+              console.log('[SdkAgClient] Current tool calls for message', tc.messageId, ':', toolCalls.map(t => t.id));
+
+              // Check for duplicates before adding
+              const exists = toolCalls.some(existing => existing.id === tc.id);
+              if (exists) {
+                console.warn('[SdkAgClient] Duplicate TOOL_CALL_END for tool call ID:', tc.id, '- SKIPPING');
+              } else {
+                toolCalls.push({
+                  id: tc.id,
+                  type: 'function',
+                  function: {
+                    name: tc.name,
+                    arguments: tc.args,
+                  },
+                });
+                console.log('[SdkAgClient] Added tool call, new count:', toolCalls.length);
+              }
+
               this.streamingToolCalls.set(tc.messageId, toolCalls);
               this.toolCallsInProgress.delete(event.toolCallId);
+            } else {
+              console.warn('[SdkAgClient] TOOL_CALL_END received but no tool call in progress for ID:', event.toolCallId);
             }
           }
 
@@ -335,24 +355,6 @@ export class SdkAgClient implements AgUiClient {
             // Cleanup streaming state
             this.streamingContent.delete(event.messageId);
             this.streamingToolCalls.delete(event.messageId);
-          }
-
-          // Handle tool result messages - add them to conversation history
-          // These provide context about tool executions without resending tool_use blocks
-          if (event.type === 'TOOL_CALL_RESULT') {
-            const toolResultMessage: Message = {
-              id: event.messageId,
-              role: 'tool',
-              content: event.content || '',
-              toolCallId: event.toolCallId,
-            };
-
-            // Add to conversation-specific history
-            const history = this.conversationHistoryByThread.get(threadId) || [];
-            history.push(toolResultMessage);
-            this.conversationHistoryByThread.set(threadId, history);
-
-            console.log(`Added tool result message ${event.messageId} for tool call ${event.toolCallId} to conversation ${threadId} history`);
           }
 
           // Forward to external handler
@@ -419,35 +421,44 @@ export class SdkAgClient implements AgUiClient {
    * - The API reconstructs tool interactions from tool result messages
    */
   private syncMessagesToHistory(conversationId: string, messages: MessageDoc[]) {
-    const history: Message[] = messages.map(msg => {
-      // Handle tool messages specially (they require toolCallId)
+    // EXCLUDE from history:
+    // 1. Tool result messages (role: 'tool') - orphaned without toolCalls in assistant messages
+    // 2. Assistant messages immediately followed by tool messages - these are incomplete
+    //    (e.g., "I'll help..." before tool execution). Keep only the FINAL assistant message
+    //    after tool completion (e.g., "Great! I found your data...")
+    //
+    // This prevents incomplete conversation sequences that confuse the LLM when switching
+    // between conversations.
+    const history: Message[] = [];
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const nextMsg = i < messages.length - 1 ? messages[i + 1] : null;
+
+      // Skip tool result messages
       if (msg.role === 'tool') {
-        const toolMessage: Message = {
-          id: msg.id,
-          role: 'tool',
-          content: msg.content,
-          toolCallId: msg.toolCallId || '',
-        };
-        return toolMessage;
+        continue;
       }
 
-      // For other message types
+      // Skip assistant messages immediately followed by tool messages
+      // (keep only the final assistant message after tool execution completes)
+      if (msg.role === 'assistant' && nextMsg && nextMsg.role === 'tool') {
+        continue;
+      }
+
+      // Keep all other messages (user, final assistant responses)
       const message: Message = {
         id: msg.id,
         role: msg.role as any,
         content: msg.content,
       };
 
-      // DO NOT include tool calls in the history that will be sent to the API
-      // Tool calls are only for display in the UI
-      // The API will reject requests with duplicate tool_use IDs
-
-      return message;
-    });
+      history.push(message);
+    }
 
     // Update the conversation history Map
     this.conversationHistoryByThread.set(conversationId, history);
-    console.log(`Synced ${history.length} messages to conversation ${conversationId} history`);
+    console.log(`Synced ${history.length} messages to conversation ${conversationId} history (excluded ${messages.length - history.length} tool/incomplete messages)`);
   }
 
   async getMessages(conversationId: Id): Promise<MessageDoc[]> {
