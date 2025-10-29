@@ -14,6 +14,8 @@ export interface ChatContextValue extends AgUiStore {
   upload?: (files: File[]) => Promise<AttachmentDoc[]>;
   sessionId?: string;
   initialConversationId?: string;
+  on: AgUiClient['on'];
+  off: AgUiClient['off'];
 }
 
 const ChatContext = createContext<ChatContextValue>();
@@ -26,6 +28,8 @@ export function ChatProvider(props: ChatProviderProps) {
     upload: props.upload,
     sessionId: props.sessionId,
     initialConversationId: props.initialConversationId,
+    on: (event, handler) => props.client.on(event, handler),
+    off: (event, handler) => props.client.off(event, handler),
   };
 
   // Initialize store on mount

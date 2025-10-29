@@ -61,11 +61,9 @@ export function useConversation(
 
   const send = async (text: string, opts?: { attachments?: Id[] }) => {
     const cid = conversationId();
-    if (!cid) {
-      throw new Error('No active conversation');
-    }
 
-    await ctx.sendMessage(cid, text, {
+    // Allow sending without conversation (will auto-create via SDK)
+    await ctx.sendMessage(cid || null, text, {
       attachments: opts?.attachments,
     });
   };

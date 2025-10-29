@@ -101,8 +101,8 @@ export type {
 // ============================================================================
 // UI Components
 // ============================================================================
-export { MessageRenderer } from './components';
-export type { MessageRendererProps } from './components';
+export { MessageRenderer, ConfirmDialog } from './components';
+export type { MessageRendererProps, ConfirmDialogProps } from './components';
 
 // ============================================================================
 // Testing Utilities
