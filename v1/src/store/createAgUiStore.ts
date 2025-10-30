@@ -36,12 +36,20 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     messagesByConversation: {},
     streaming: {},
     toolCallsInProgress: {},
+    agentStateByConversation: {}, // Agent state tracking
   });
 
   const [isConnected, setIsConnected] = createSignal(true); // Always connected in REST mode
 
   // Track which conversations have been loaded from server to prevent duplicate loads
   const loadedConversations = new Set<string>();
+
+  // If client is SdkAgClient, provide state getter for bidirectional state flow
+  if ('getConversationState' in client && typeof (client as any).getConversationState === 'undefined') {
+    (client as any).getConversationState = (conversationId: string) => {
+      return state.agentStateByConversation[conversationId] || {};
+    };
+  }
 
   // Subscribe to all normalized events
   client.on('conversation.created', (payload) => {
@@ -234,6 +242,23 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   client.on('attachment.failed', () => {
     // Optionally track errors
+  });
+
+  // Handle STATE_SNAPSHOT events for agent state (suggested questions, etc.)
+  client.on('STATE_SNAPSHOT', (payload) => {
+    const p = payload as any;
+    console.log('[STATE_SNAPSHOT] Received agent state update:', p);
+
+    // Extract conversation ID from payload or use active conversation
+    const conversationId = p.conversationId || state.activeConversationId;
+
+    if (conversationId && p.snapshot) {
+      // Update agent state for this conversation
+      setState('agentStateByConversation', conversationId, p.snapshot);
+      console.log('[STATE_SNAPSHOT] Updated state for conversation:', conversationId);
+    } else {
+      console.warn('[STATE_SNAPSHOT] No conversationId or snapshot in payload:', p);
+    }
   });
 
   // Conversation management methods
