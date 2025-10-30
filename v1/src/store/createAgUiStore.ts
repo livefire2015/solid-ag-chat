@@ -122,6 +122,14 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   client.on('message.canceled', (payload) => {
     const { messageId } = payload as any;
+
+    // Preserve the partial streaming text before marking as canceled
+    // This ensures the UI can display what was generated before stopping
+    const streamingState = state.streaming[messageId];
+    if (streamingState?.text) {
+      setState('messages', messageId, 'content', streamingState.text);
+    }
+
     setState('messages', messageId, 'status', 'canceled');
   });
 
