@@ -24,6 +24,13 @@ export type {
   AgSpecEventType,
 } from './types';
 
+// Shared State Types
+export type {
+  SuggestedQuestions,
+  ChatAgentState,
+  AgentStateMap,
+} from './types/state';
+
 // Re-export official AG-UI types from core
 export type {
   ToolCall,
@@ -88,6 +95,7 @@ export {
   useConversation,
   useMessages,
   useStreamingText,
+  useSuggestedQuestions,
 } from './primitives';
 
 export type {
@@ -96,6 +104,8 @@ export type {
   UseChatReturn,
   UseConversationListReturn,
   UseConversationReturn,
+  UseSuggestedQuestionsReturn,
+  UseSuggestedQuestionsOptions,
 } from './primitives';
 
 // ============================================================================
