@@ -9,6 +9,7 @@ import type {
   AgSpecEventType,
   UsageDoc,
 } from '../types';
+import type { AgentStateMap } from '../types/state';
 import { EventType } from '@ag-ui/core';
 import type { ToolCall } from '@ag-ui/core';
 import { applyPatch, Operation } from 'fast-json-patch';
@@ -31,6 +32,7 @@ export interface ChatState {
   streaming: Record<Id, { text: string }>;
   toolCallsInProgress: Record<string, ToolCallInProgress>; // toolCallId -> tool call
   activeConversationId?: Id;
+  agentStateByConversation: AgentStateMap; // NEW: Track agent state per conversation
 }
 
 export function initStateFromSnapshot(snap: StateSnapshot): ChatState {
@@ -57,6 +59,7 @@ export function initStateFromSnapshot(snap: StateSnapshot): ChatState {
     streaming: {},
     toolCallsInProgress: {},
     activeConversationId: snap.activeConversationId,
+    agentStateByConversation: {}, // Initialize empty agent state map
   };
 }
 
