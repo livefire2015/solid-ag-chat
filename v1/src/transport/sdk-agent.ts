@@ -13,6 +13,7 @@ export interface SdkAgentOptions {
   headers?: Record<string, string>;
   agentEndpoint?: string; // Defaults to '/agent/run'
   conversationsEndpoint?: string; // For conversation CRUD
+  getConversationState?: (conversationId: string) => any; // Optional state getter
 }
 
 /**
@@ -23,6 +24,7 @@ export class SdkAgClient implements AgUiClient {
   private baseUrl: string;
   private headers: Record<string, string>;
   private conversationsEndpoint: string;
+  private getConversationState?: (conversationId: string) => any;
   private listeners = new Map<string, Set<Function>>();
 
   // Client-side state management
@@ -45,6 +47,7 @@ export class SdkAgClient implements AgUiClient {
     this.baseUrl = options.baseUrl;
     this.headers = options.headers || {};
     this.conversationsEndpoint = options.conversationsEndpoint || '/conversations';
+    this.getConversationState = options.getConversationState;
 
     // Create SDK HttpAgent
     this.agent = new HttpAgent({
@@ -255,16 +258,26 @@ export class SdkAgClient implements AgUiClient {
     };
     this.emit('message.created', { message: userMessageDoc });
 
-    // Prepare RunAgentInput with conversation-specific history
+    // Get current agent state for this conversation
+    const conversationState = this.getConversationState
+      ? this.getConversationState(threadId)
+      : {};
+
+    // Prepare RunAgentInput with conversation-specific history and state
     const input: RunAgentInput = {
       threadId,
       runId: `run_${crypto.randomUUID()}`,
-      state: {},
+      state: conversationState || {}, // Include agent state
       messages: [...conversationHistory],
       tools: [],
       context: [],
       forwardedProps: options?.metadata || {},
     };
+
+    // Log state being sent for debugging
+    if (conversationState && Object.keys(conversationState).length > 0) {
+      console.log('[SdkAgClient.sendMessage] Sending state:', conversationState);
+    }
 
     try {
       let assistantMessageId: string | null = null;
