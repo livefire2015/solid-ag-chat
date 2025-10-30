@@ -14,3 +14,9 @@ export type { UseConversationReturn, UseConversationOptions } from './useConvers
 
 export { useMessages } from './useMessages';
 export { useStreamingText } from './useStreamingText';
+
+export { useSuggestedQuestions } from './useSuggestedQuestions';
+export type {
+  UseSuggestedQuestionsReturn,
+  UseSuggestedQuestionsOptions,
+} from './useSuggestedQuestions';
