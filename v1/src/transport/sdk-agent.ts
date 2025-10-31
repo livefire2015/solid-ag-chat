@@ -24,6 +24,7 @@ export class SdkAgClient implements AgUiClient {
   private baseUrl: string;
   private headers: Record<string, string>;
   private conversationsEndpoint: string;
+  private agentEndpointPath: string;
   private getConversationState?: (conversationId: string) => any;
   private listeners = new Map<string, Set<Function>>();
 
@@ -43,15 +44,19 @@ export class SdkAgClient implements AgUiClient {
   // Active subscriptions for cancellation (messageId -> subscription)
   private activeSubscriptions = new Map<string, any>();
 
+  // Map assistant messageId -> runId for server-side cancellation
+  private activeRunByMessageId = new Map<string, string>();
+
   constructor(options: SdkAgentOptions) {
     this.baseUrl = options.baseUrl;
     this.headers = options.headers || {};
     this.conversationsEndpoint = options.conversationsEndpoint || '/conversations';
+    this.agentEndpointPath = options.agentEndpoint || '/agent/run';
     this.getConversationState = options.getConversationState;
 
     // Create SDK HttpAgent
     this.agent = new HttpAgent({
-      url: `${options.baseUrl}${options.agentEndpoint || '/agent/run'}`,
+      url: `${options.baseUrl}${this.agentEndpointPath}`,
       headers: this.headers,
     });
 
@@ -292,6 +297,14 @@ export class SdkAgClient implements AgUiClient {
             assistantMessageId = event.messageId;
             this.streamingContent.set(event.messageId, '');
             this.streamingToolCalls.set(event.messageId, []);
+
+            // Track runId for this assistant message for server-side cancellation
+            if (input.runId) {
+              this.activeRunByMessageId.set(event.messageId, input.runId);
+            }
+
+            // Track subscription by assistant message ID for cancellation
+            this.activeSubscriptions.set(event.messageId, subscription);
           }
 
           if (event.type === 'TEXT_MESSAGE_CONTENT') {
@@ -385,7 +398,7 @@ export class SdkAgClient implements AgUiClient {
           if (assistantMessageId) {
             this.streamingContent.delete(assistantMessageId);
             this.streamingToolCalls.delete(assistantMessageId);
-            this.activeSubscriptions.delete(userMessage.id);
+            this.activeSubscriptions.delete(assistantMessageId);
           }
 
           // Cleanup any incomplete tool calls
@@ -395,8 +408,13 @@ export class SdkAgClient implements AgUiClient {
             }
           });
 
+          // Cleanup run mapping
+          if (assistantMessageId) {
+            this.activeRunByMessageId.delete(assistantMessageId);
+          }
+
           this.emit('message.errored', {
-            messageId: userMessage.id,
+            messageId: assistantMessageId || userMessage.id,
             error: error.message
           });
         },
@@ -405,14 +423,12 @@ export class SdkAgClient implements AgUiClient {
           if (assistantMessageId) {
             this.streamingContent.delete(assistantMessageId);
             this.streamingToolCalls.delete(assistantMessageId);
+            this.activeSubscriptions.delete(assistantMessageId);
+            this.activeRunByMessageId.delete(assistantMessageId);
           }
-          this.activeSubscriptions.delete(userMessage.id);
           console.log('Agent run completed');
         },
       });
-
-      // Track subscription for cancellation
-      this.activeSubscriptions.set(userMessage.id, subscription);
 
       return {} as MessageDoc; // Actual message comes from events
     } catch (error: any) {
@@ -498,19 +514,65 @@ export class SdkAgClient implements AgUiClient {
   }
 
   async cancelMessage(conversationId: Id, messageId: Id): Promise<void> {
-    // 1. Abort active subscription
+    // 1. Get partial content before cleanup
+    const partialContent = this.streamingContent.get(messageId);
+
+    // 2. Abort active subscription
     const subscription = this.activeSubscriptions.get(messageId);
     if (subscription) {
       subscription.unsubscribe();
       this.activeSubscriptions.delete(messageId);
     }
 
-    // 2. Cleanup streaming state for any messages being accumulated
-    this.streamingContent.clear();
-    this.streamingToolCalls.clear();
-    this.toolCallsInProgress.clear();
+    // 2b. Best-effort server-side cancel by runId (if known)
+    try {
+      const runId = this.activeRunByMessageId.get(messageId);
+      if (runId && this.agentEndpointPath.includes('/ag-ui')) {
+        const cancelUrl = `${this.baseUrl}${this.agentEndpointPath}/cancel`;
+        await fetch(cancelUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.headers,
+          },
+          body: JSON.stringify({ runId }),
+          credentials: 'include',
+        }).catch(() => void 0);
+      }
+    } catch {
+      // ignore
+    }
 
-    // 3. Emit canceled event
+    // 3. Save partial message to backend with canceled status
+    if (partialContent) {
+      try {
+        const endpoint = `${this.conversationsEndpoint}/${conversationId}/messages/${messageId}`;
+        await fetch(`${this.baseUrl}${endpoint}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.headers
+          },
+          body: JSON.stringify({
+            content: partialContent,
+            status: 'canceled'
+          }),
+          credentials: 'include'
+        });
+        console.log('[cancelMessage] Saved partial content to backend:', partialContent.length, 'chars');
+      } catch (error) {
+        console.error('[cancelMessage] Failed to save canceled message to backend:', error);
+        // Don't throw - cancellation should still work even if save fails
+      }
+    }
+
+    // 4. Cleanup streaming state
+    this.streamingContent.delete(messageId);
+    this.streamingToolCalls.delete(messageId);
+    this.toolCallsInProgress.delete(messageId);
+    this.activeRunByMessageId.delete(messageId);
+
+    // 5. Emit canceled event
     this.emit('message.canceled', { messageId });
   }
 
