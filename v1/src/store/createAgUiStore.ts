@@ -44,10 +44,17 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   // Track which conversations have been loaded from server to prevent duplicate loads
   const loadedConversations = new Set<string>();
 
-  // If client is SdkAgClient, provide state getter for bidirectional state flow
+  // If client is SdkAgClient, provide state getters for bidirectional state flow
   if ('getConversationState' in client && typeof (client as any).getConversationState === 'undefined') {
     (client as any).getConversationState = (conversationId: string) => {
       return state.agentStateByConversation[conversationId] || {};
+    };
+  }
+
+  // Provide global state getter for attachments and other global state
+  if ('getGlobalState' in client && typeof (client as any).getGlobalState === 'undefined') {
+    (client as any).getGlobalState = () => {
+      return state;
     };
   }
 
@@ -243,13 +250,55 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     }
   });
 
+  // Attachment upload events
+  client.on('attachment.uploading', (payload) => {
+    const { attachment } = payload as any;
+    setState('attachments', attachment.id, attachment);
+  });
+
+  client.on('attachment.progress', (payload) => {
+    const { fileId, progress } = payload as any;
+    // Update progress if needed (optional - can be handled in components)
+    if (state.attachments[fileId]) {
+      setState('attachments', fileId, 'metadata', (meta = {}) => ({
+        ...meta,
+        progress: progress,
+      }));
+    }
+  });
+
   client.on('attachment.available', (payload) => {
     const { attachment } = payload as any;
     setState('attachments', attachment.id, attachment);
   });
 
-  client.on('attachment.failed', () => {
-    // Optionally track errors
+  client.on('attachment.failed', (payload) => {
+    const { fileId, error } = payload as any;
+    // Mark attachment as failed
+    if (state.attachments[fileId]) {
+      setState('attachments', fileId, 'state', 'failed');
+      setState('attachments', fileId, 'metadata', (meta = {}) => ({
+        ...meta,
+        error: error || 'Upload failed',
+      }));
+    }
+  });
+
+  // Persist attachments to conversation state after successful message send
+  client.on('attachments.persisted', (payload) => {
+    const { conversationId, attachments } = payload as any;
+    console.log('[attachments.persisted] Saving attachments to conversation:', conversationId, attachments);
+
+    if (conversationId && attachments) {
+      // Merge new attachments into conversation's agent state
+      setState('agentStateByConversation', conversationId, (prevState = {}) => ({
+        ...prevState,
+        attachments: {
+          ...(prevState.attachments || {}),
+          ...attachments,
+        },
+      }));
+    }
   });
 
   // Handle STATE_SNAPSHOT events for agent state (suggested questions, etc.)
