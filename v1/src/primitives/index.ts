@@ -20,3 +20,9 @@ export type {
   UseSuggestedQuestionsReturn,
   UseSuggestedQuestionsOptions,
 } from './useSuggestedQuestions';
+
+export { useFileUpload } from './useFileUpload';
+export type {
+  UseFileUploadConfig,
+  FileUploadState,
+} from './useFileUpload';
