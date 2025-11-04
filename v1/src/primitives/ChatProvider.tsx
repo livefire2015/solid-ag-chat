@@ -11,6 +11,7 @@ export interface ChatProviderProps {
 }
 
 export interface ChatContextValue extends AgUiStore {
+  client: AgUiClient;
   upload?: (files: File[]) => Promise<AttachmentDoc[]>;
   sessionId?: string;
   initialConversationId?: string;
@@ -25,6 +26,7 @@ export function ChatProvider(props: ChatProviderProps) {
 
   const contextValue: ChatContextValue = {
     ...store,
+    client: props.client,
     upload: props.upload,
     sessionId: props.sessionId,
     initialConversationId: props.initialConversationId,
