@@ -84,6 +84,13 @@ export {
 export type { AgUiStore } from './store/createAgUiStore';
 export { createAgUiStore } from './store/createAgUiStore';
 
+// Persistence utilities (for debugging and advanced use cases)
+export {
+  clearPersistedState,
+  viewPersistedState,
+  getStorageStats,
+} from './store/persistence';
+
 // ============================================================================
 // SolidJS Primitives (Recommended API)
 // ============================================================================
