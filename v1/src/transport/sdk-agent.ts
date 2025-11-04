@@ -14,6 +14,7 @@ export interface SdkAgentOptions {
   agentEndpoint?: string; // Defaults to '/agent/run'
   conversationsEndpoint?: string; // For conversation CRUD
   getConversationState?: (conversationId: string) => any; // Optional state getter
+  getGlobalState?: () => any; // Optional global state getter (for attachments, etc.)
 }
 
 /**
@@ -26,6 +27,7 @@ export class SdkAgClient implements AgUiClient {
   private conversationsEndpoint: string;
   private agentEndpointPath: string;
   private getConversationState?: (conversationId: string) => any;
+  private getGlobalState?: () => any;
   private listeners = new Map<string, Set<Function>>();
 
   // Client-side state management
@@ -53,6 +55,7 @@ export class SdkAgClient implements AgUiClient {
     this.conversationsEndpoint = options.conversationsEndpoint || '/conversations';
     this.agentEndpointPath = options.agentEndpoint || '/agent/run';
     this.getConversationState = options.getConversationState;
+    this.getGlobalState = options.getGlobalState;
 
     // Create SDK HttpAgent
     this.agent = new HttpAgent({
@@ -85,7 +88,7 @@ export class SdkAgClient implements AgUiClient {
     set?.delete(handler);
   }
 
-  private emit<E extends string>(type: E, payload: any) {
+  emit<E extends string>(type: E, payload: any): void {
     const set = this.listeners.get(type);
     if (!set) return;
     set.forEach((fn) => {
@@ -268,11 +271,40 @@ export class SdkAgClient implements AgUiClient {
       ? this.getConversationState(threadId)
       : {};
 
+    // Get global state for attachments (pending uploads)
+    const globalState = this.getGlobalState ? this.getGlobalState() : {};
+
+    // Merge attachments from three sources:
+    // 1. Previously sent attachments from conversation state
+    // 2. New pending uploads from global state
+    // 3. Specific attachment IDs from options parameter
+    const mergedAttachments: Record<string, any> = {
+      // Start with conversation's existing attachments
+      ...(conversationState.attachments || {}),
+    };
+
+    // Add new attachments from options (if provided)
+    if (options?.attachments && options.attachments.length > 0) {
+      options.attachments.forEach((id) => {
+        // Try global state first (new uploads), then conversation state (previously sent)
+        const attachment = globalState?.attachments?.[id] || conversationState.attachments?.[id];
+        if (attachment) {
+          mergedAttachments[id] = attachment;
+        }
+      });
+    }
+
+    // Build state with merged attachments
+    const stateWithAttachments = {
+      ...conversationState,
+      ...(Object.keys(mergedAttachments).length > 0 ? { attachments: mergedAttachments } : {})
+    };
+
     // Prepare RunAgentInput with conversation-specific history and state
     const input: RunAgentInput = {
       threadId,
       runId: `run_${crypto.randomUUID()}`,
-      state: conversationState || {}, // Include agent state
+      state: stateWithAttachments, // Include agent state + attachments
       messages: [...conversationHistory],
       tools: [],
       context: [],
@@ -426,6 +458,15 @@ export class SdkAgClient implements AgUiClient {
             this.activeSubscriptions.delete(assistantMessageId);
             this.activeRunByMessageId.delete(assistantMessageId);
           }
+
+          // Persist attachments to conversation state after successful send
+          if (options?.attachments && options.attachments.length > 0) {
+            this.emit('attachments.persisted', {
+              conversationId: threadId,
+              attachments: mergedAttachments,
+            });
+          }
+
           console.log('Agent run completed');
         },
       });
