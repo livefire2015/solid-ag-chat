@@ -71,8 +71,8 @@ export function useFileUpload(config: UseFileUploadConfig) {
       },
     }));
 
-    // Emit uploading event
-    config.client.emit('attachment.uploading', { attachment: optimisticAttachment });
+    // Don't emit event yet - wait for content_id from backend
+    // config.client.emit('attachment.uploading', { attachment: optimisticAttachment });
 
     try {
       // 2. Initiate upload with external API
