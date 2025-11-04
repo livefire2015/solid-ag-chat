@@ -1,6 +1,7 @@
-import { createContext, useContext, JSX, onMount } from 'solid-js';
+import { createContext, useContext, JSX, onMount, createEffect } from 'solid-js';
 import type { AgUiClient, AttachmentDoc } from '../types';
 import { createAgUiStore, AgUiStore } from '../store/createAgUiStore';
+import { debouncedSaveAgentState } from '../store/persistence';
 
 export interface ChatProviderProps {
   client: AgUiClient;
@@ -23,6 +24,17 @@ const ChatContext = createContext<ChatContextValue>();
 
 export function ChatProvider(props: ChatProviderProps) {
   const store = createAgUiStore(props.client);
+
+  // Auto-save agent state to localStorage when it changes
+  // This runs in proper reactive context (inside component)
+  createEffect(() => {
+    const agentState = store.state.agentStateByConversation;
+
+    // Only save if there's data
+    if (Object.keys(agentState).length > 0) {
+      debouncedSaveAgentState(agentState);
+    }
+  });
 
   const contextValue: ChatContextValue = {
     ...store,
