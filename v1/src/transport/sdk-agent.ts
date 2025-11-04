@@ -459,14 +459,6 @@ export class SdkAgClient implements AgUiClient {
             this.activeRunByMessageId.delete(assistantMessageId);
           }
 
-          // Persist attachments to conversation state after successful send
-          if (options?.attachments && options.attachments.length > 0) {
-            this.emit('attachments.persisted', {
-              conversationId: threadId,
-              attachments: mergedAttachments,
-            });
-          }
-
           console.log('Agent run completed');
         },
       });
