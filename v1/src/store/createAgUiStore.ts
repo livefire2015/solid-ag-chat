@@ -63,6 +63,9 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     const c = (payload as any).conversation;
     setState('conversations', c.id, c);
     setState('activeConversationId', c.id);
+
+    // Attachments are now scoped per conversation
+    // No auto-copy from global state to prevent attachment pollution
   });
 
   client.on('conversation.updated', (payload) => {
@@ -253,7 +256,24 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   // Attachment upload events
   client.on('attachment.uploading', (payload) => {
     const { attachment } = payload as any;
+
+    // Store in global state for UI display
     setState('attachments', attachment.id, attachment);
+
+    // IMMEDIATELY store in conversation's shared state if conversation exists
+    const conversationId = state.activeConversationId;
+    if (conversationId) {
+      setState('agentStateByConversation', conversationId, (prevState = {}) => ({
+        ...prevState,
+        attachments: {
+          ...(prevState.attachments || {}),
+          [attachment.id]: attachment,
+        },
+      }));
+      console.log('[attachment.uploading] Stored in conversation shared state:', conversationId, attachment.id);
+    } else {
+      console.log('[attachment.uploading] No active conversation, stored in global only:', attachment.id);
+    }
   });
 
   client.on('attachment.progress', (payload) => {
@@ -269,12 +289,30 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   client.on('attachment.available', (payload) => {
     const { attachment } = payload as any;
+
+    // Update in global state
     setState('attachments', attachment.id, attachment);
+
+    // IMMEDIATELY update in conversation's shared state if conversation exists
+    const conversationId = state.activeConversationId;
+    if (conversationId) {
+      setState('agentStateByConversation', conversationId, (prevState = {}) => ({
+        ...prevState,
+        attachments: {
+          ...(prevState.attachments || {}),
+          [attachment.id]: attachment,
+        },
+      }));
+      console.log('[attachment.available] Updated in conversation shared state:', conversationId, attachment.id);
+    } else {
+      console.log('[attachment.available] No active conversation, updated global only:', attachment.id);
+    }
   });
 
   client.on('attachment.failed', (payload) => {
     const { fileId, error } = payload as any;
-    // Mark attachment as failed
+
+    // Mark attachment as failed in global state
     if (state.attachments[fileId]) {
       setState('attachments', fileId, 'state', 'failed');
       setState('attachments', fileId, 'metadata', (meta = {}) => ({
@@ -282,22 +320,16 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
         error: error || 'Upload failed',
       }));
     }
-  });
 
-  // Persist attachments to conversation state after successful message send
-  client.on('attachments.persisted', (payload) => {
-    const { conversationId, attachments } = payload as any;
-    console.log('[attachments.persisted] Saving attachments to conversation:', conversationId, attachments);
-
-    if (conversationId && attachments) {
-      // Merge new attachments into conversation's agent state
-      setState('agentStateByConversation', conversationId, (prevState = {}) => ({
-        ...prevState,
-        attachments: {
-          ...(prevState.attachments || {}),
-          ...attachments,
-        },
+    // Also update in conversation's shared state if conversation exists
+    const conversationId = state.activeConversationId;
+    if (conversationId && state.agentStateByConversation[conversationId]?.attachments?.[fileId]) {
+      setState('agentStateByConversation', conversationId, 'attachments', fileId, 'state', 'failed');
+      setState('agentStateByConversation', conversationId, 'attachments', fileId, 'metadata', (meta = {}) => ({
+        ...meta,
+        error: error || 'Upload failed',
       }));
+      console.log('[attachment.failed] Updated in conversation shared state:', conversationId, fileId);
     }
   });
 
@@ -334,6 +366,10 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   const setActiveConversation = (id: Id) => {
     setState('activeConversationId', id);
+
+    // Clear global attachments when switching conversations
+    // Each conversation should have its own attachments in agentStateByConversation
+    setState('attachments', {});
 
     // Also set active thread in SDK client if supported
     if (client.setActiveThread) {
