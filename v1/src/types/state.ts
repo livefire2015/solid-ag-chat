@@ -12,6 +12,9 @@ export interface ChatAgentState {
   /** Suggested follow-up questions from the agent */
   suggestedQuestions?: SuggestedQuestions;
 
+  /** Attachments associated with this conversation */
+  attachments?: Record<string, any>;
+
   // Future state fields
   // selectedModel?: string;
   // conversationMode?: 'normal' | 'creative' | 'precise';
