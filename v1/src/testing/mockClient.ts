@@ -212,7 +212,7 @@ export class MockAgClient implements AgUiClient {
     };
   }
 
-  private emit<E extends AllEventType>(type: E, payload: any) {
+  emit<E extends AllEventType>(type: E, payload: any): void {
     this.emitter.emit(type, payload);
   }
 
