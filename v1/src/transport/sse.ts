@@ -52,7 +52,7 @@ export class SseAgClient implements AgUiClient {
     set?.delete(handler as any);
   }
 
-  private emit<E extends AllEventType>(type: E, payload: any) {
+  emit<E extends AllEventType>(type: E, payload: any): void {
     const set = this.listeners.get(type);
     if (!set) return;
     set.forEach((fn) => {
