@@ -96,6 +96,7 @@ export {
   useMessages,
   useStreamingText,
   useSuggestedQuestions,
+  useFileUpload,
 } from './primitives';
 
 export type {
@@ -106,7 +107,27 @@ export type {
   UseConversationReturn,
   UseSuggestedQuestionsReturn,
   UseSuggestedQuestionsOptions,
+  UseFileUploadConfig,
+  FileUploadState,
 } from './primitives';
+
+// ============================================================================
+// File Upload Services
+// ============================================================================
+export { FileUploadApi, FileUploadApiError } from './services/fileUploadApi';
+export type {
+  InitiateUploadRequest,
+  InitiateUploadResponse,
+  UploadCompleteRequest,
+  UploadCompleteResponse,
+} from './services/fileUploadApi';
+
+export { uploadToPresignedUrl, UploadError } from './services/uploadToPresignedUrl';
+export type {
+  UploadProgress,
+  ProgressCallback,
+  UploadOptions,
+} from './services/uploadToPresignedUrl';
 
 // ============================================================================
 // UI Components
