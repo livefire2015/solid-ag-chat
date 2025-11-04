@@ -126,7 +126,7 @@ export interface ConversationDoc {
 }
 
 // Attachment management (custom extension)
-export type AttachmentState = 'uploaded' | 'processing' | 'available' | 'failed';
+export type AttachmentState = 'pending' | 'uploading' | 'uploaded' | 'processing' | 'available' | 'failed';
 
 export interface AttachmentDoc {
   id: Id;
@@ -201,8 +201,11 @@ export interface ExtendedEventPayloads {
   'message.canceled': { messageId: Id };
 
   // Attachment events (custom)
+  'attachment.uploading': { attachment: AttachmentDoc };
+  'attachment.progress': { fileId: Id; progress: { percentage: number; loaded: number; total: number } };
   'attachment.available': { attachment: AttachmentDoc };
-  'attachment.failed': { id: Id; error: { code: string; message: string; details?: unknown } };
+  'attachment.failed': { fileId: Id; attachment?: AttachmentDoc; error: { code: string; message: string; details?: unknown } };
+  'attachments.persisted': { conversationId: Id; attachments: Record<Id, AttachmentDoc> };
 }
 
 export type ExtendedEventType = keyof ExtendedEventPayloads;
@@ -260,6 +263,7 @@ export interface AgUiClient {
   // Event handling (supports both official AG-UI events and custom events)
   on<E extends AllEventType>(type: E, handler: (payload: any) => void): () => void;
   off<E extends AllEventType>(type: E, handler: (payload: any) => void): void;
+  emit<E extends ExtendedEventType>(type: E, payload: any): void; // For custom client-side events
 
   // Conversation management (custom extension)
   createConversation(title?: string, metadata?: Record<string, unknown>): Promise<ConversationDoc>;
