@@ -1,8 +1,9 @@
 import { createStore } from 'solid-js/store';
-import { createSignal } from 'solid-js';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
 import type { AgUiClient, Id, ConversationDoc } from '../types';
 import type { ChatState } from './state';
 import { initStateFromSnapshot, applyNormalizedEvent } from './state';
+import { loadAgentState, debouncedSaveAgentState, clearPersistedState, viewPersistedState, getStorageStats } from './persistence';
 
 export interface AgUiStore {
   state: ChatState;
@@ -24,10 +25,20 @@ export interface AgUiStore {
   cancelMessage: (conversationId: Id, messageId: Id) => Promise<void>;
 
   close: () => void;
+
+  // Debug tools (for development)
+  _debug: {
+    clearPersistedState: () => void;
+    viewPersistedState: () => any;
+    getStorageStats: () => { used: number; total: number; percentage: number };
+  };
 }
 
 export function createAgUiStore(client: AgUiClient): AgUiStore {
-  // Initialize empty state
+  // Load persisted agent state from localStorage
+  const persistedAgentState = loadAgentState();
+
+  // Initialize state (with persisted agent state if available)
   const [state, setState] = createStore<ChatState>({
     revision: '0',
     conversations: {},
@@ -36,7 +47,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     messagesByConversation: {},
     streaming: {},
     toolCallsInProgress: {},
-    agentStateByConversation: {}, // Agent state tracking
+    agentStateByConversation: persistedAgentState || {}, // Restore from localStorage
   });
 
   const [isConnected, setIsConnected] = createSignal(true); // Always connected in REST mode
@@ -57,6 +68,31 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
       return state;
     };
   }
+
+  // NOTE: Auto-save moved to ChatProvider.tsx where it runs in proper reactive context
+  // createEffect outside a component doesn't track dependencies properly
+
+  // Multi-tab synchronization via storage events
+  const handleStorageChange = (event: StorageEvent) => {
+    if (event.key === 'solid-ag-chat:agentState' && event.newValue) {
+      try {
+        const parsed = JSON.parse(event.newValue);
+        if (parsed.version === 1) {
+          console.log('[store] Syncing agent state from another tab');
+
+          // Update state with data from other tab
+          // Note: This will trigger auto-save in ChatProvider, which is fine
+          // Storage events only fire in OTHER tabs, not the one that made the change
+          setState('agentStateByConversation', parsed.data);
+        }
+      } catch (error) {
+        console.error('[store] Failed to sync from storage event:', error);
+      }
+    }
+  };
+
+  // Register storage event listener
+  window.addEventListener('storage', handleStorageChange);
 
   // Subscribe to all normalized events
   client.on('conversation.created', (payload) => {
@@ -343,7 +379,11 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
     if (conversationId && p.snapshot) {
       // Update agent state for this conversation
-      setState('agentStateByConversation', conversationId, p.snapshot);
+      // Use merge pattern to trigger reactivity (same as attachments)
+      setState('agentStateByConversation', conversationId, (prevState = {}) => ({
+        ...prevState,
+        ...p.snapshot,
+      }));
       console.log('[STATE_SNAPSHOT] Updated state for conversation:', conversationId);
     } else {
       console.warn('[STATE_SNAPSHOT] No conversationId or snapshot in payload:', p);
@@ -494,6 +534,17 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     loadMessages,
     sendMessage,
     cancelMessage,
-    close: () => client.close(),
+    close: () => {
+      // Cleanup storage event listener
+      window.removeEventListener('storage', handleStorageChange);
+      client.close();
+    },
+
+    // Debug tools (exposed for development)
+    _debug: {
+      clearPersistedState,
+      viewPersistedState,
+      getStorageStats,
+    },
   };
 }
