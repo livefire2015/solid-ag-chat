@@ -12,7 +12,10 @@ export interface ChatAgentState {
   /** Suggested follow-up questions from the agent */
   suggestedQuestions?: SuggestedQuestions;
 
-  /** Attachments associated with this conversation */
+  /**
+   * Attachments associated with this conversation.
+   * Each attachment has: { id, name, mime, size, upload_url, state, metadata }
+   */
   attachments?: Record<string, any>;
 
   // Future state fields
