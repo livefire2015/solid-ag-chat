@@ -6,18 +6,19 @@
  */
 
 export interface InitiateUploadRequest {
-  owner_id: string;
   owner_type: 'conversation' | 'user';
-  tenant_id: string;
   file_name: string;
   mime_type: string;
   document_type?: string;
   storage_backend_name?: string;
+  // owner_id (user_uuid) and tenant_id come from JWT auth on backend
 }
 
 export interface InitiateUploadResponse {
   content_id: string;
   upload_url: string;
+  status: string;
+  created_at: string;
 }
 
 export interface UploadCompleteRequest {
@@ -25,7 +26,10 @@ export interface UploadCompleteRequest {
 }
 
 export interface UploadCompleteResponse {
+  content_id: string;
   status: 'uploaded' | 'processing' | 'available';
+  file_size: number;
+  mime_type: string;
 }
 
 export class FileUploadApiError extends Error {
@@ -54,7 +58,7 @@ export class FileUploadApi {
     try {
       const headers = await this.getAuthHeaders();
 
-      const response = await fetch(`${this.apiUrl}/upload/initiate`, {
+      const response = await fetch(`${this.apiUrl}/upload`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
