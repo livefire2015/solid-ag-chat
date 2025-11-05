@@ -12,14 +12,13 @@ import { uploadToPresignedUrl, type UploadProgress } from '../services/uploadToP
 
 export interface UseFileUploadConfig {
   client: AgUiClient;
-  userId: string;
-  tenantId: string;
   conversationId?: string;
   fileUploadApiUrl: string;
   getAuthHeaders?: () => Promise<Record<string, string>> | Record<string, string>;
   onProgress?: (fileId: Id, progress: UploadProgress) => void;
   onComplete?: (attachment: AttachmentDoc) => void;
   onError?: (fileId: Id, error: Error) => void;
+  // userId and tenantId removed - come from JWT auth on backend
 }
 
 export interface FileUploadState {
@@ -55,7 +54,7 @@ export function useFileUpload(config: UseFileUploadConfig) {
       name: file.name,
       mime: file.type,
       size: file.size,
-      url: '',
+      upload_url: '',
       state: 'pending',
       metadata: {},
     };
@@ -77,11 +76,10 @@ export function useFileUpload(config: UseFileUploadConfig) {
     try {
       // 2. Initiate upload with external API
       const initiateRequest: InitiateUploadRequest = {
-        owner_id: config.conversationId || config.userId,
         owner_type: config.conversationId ? 'conversation' : 'user',
-        tenant_id: config.tenantId,
         file_name: file.name,
         mime_type: file.type,
+        // owner_id (user_uuid) and tenant_id come from JWT auth on backend
       };
 
       const { content_id, upload_url } = await fileApi.initiateUpload(initiateRequest);
@@ -140,7 +138,7 @@ export function useFileUpload(config: UseFileUploadConfig) {
         name: file.name,
         mime: file.type,
         size: file.size,
-        url: upload_url, // Use presigned URL (or get download URL from result)
+        upload_url: upload_url, // Use presigned URL (or get download URL from result)
         state: result.status === 'available' ? 'available' : 'uploaded',
         metadata: {},
       };
