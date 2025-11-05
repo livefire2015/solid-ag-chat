@@ -133,7 +133,7 @@ export interface AttachmentDoc {
   name: string;
   mime: string;
   size: number;
-  url: string; // download URL
+  upload_url: string; // presigned upload URL
   state: AttachmentState;
   metadata?: Record<string, unknown>;
 }
