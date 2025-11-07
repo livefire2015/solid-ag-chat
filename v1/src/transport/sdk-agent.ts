@@ -328,10 +328,14 @@ export class SdkAgClient implements AgUiClient {
       let assistantMessageId: string | null = null;
 
       console.log('[SdkAgClient.sendMessage] Calling this.agent.run() with runId:', input.runId);
+      console.log('[SdkAgClient.sendMessage] Agent type:', this.agent.constructor.name);
+      console.log('[SdkAgClient.sendMessage] Input being sent:', JSON.stringify(input, null, 2));
 
       // Run agent and subscribe to events
       const subscription = this.agent.run(input).subscribe({
         next: (event: any) => {
+          console.log('[HttpAgent.next] 🎯 EVENT RECEIVED:', event.type, event);
+
           // Accumulate streaming content for conversation history
           if (event.type === 'TEXT_MESSAGE_START') {
             assistantMessageId = event.messageId;
@@ -432,7 +436,12 @@ export class SdkAgClient implements AgUiClient {
           this.emit(event.type, enrichedEvent);
         },
         error: (error: Error) => {
-          console.error('Agent error:', error);
+          console.error('[HttpAgent.error] ❌ STREAM ERROR:', error);
+          console.error('[HttpAgent.error] Error details:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+          });
 
           // Cleanup on error
           if (assistantMessageId) {
@@ -459,6 +468,9 @@ export class SdkAgClient implements AgUiClient {
           });
         },
         complete: () => {
+          console.log('[HttpAgent.complete] ✅ STREAM COMPLETED');
+          console.log('[HttpAgent.complete] Final assistant message ID:', assistantMessageId);
+
           // Cleanup on completion
           if (assistantMessageId) {
             this.streamingContent.delete(assistantMessageId);
@@ -467,7 +479,7 @@ export class SdkAgClient implements AgUiClient {
             this.activeRunByMessageId.delete(assistantMessageId);
           }
 
-          console.log('Agent run completed');
+          console.log('[HttpAgent.complete] Agent run completed');
         },
       });
 
