@@ -131,6 +131,7 @@ export function useFileUpload(config: UseFileUploadConfig) {
 
       // 4. Mark upload complete
       const result = await fileApi.uploadComplete(content_id);
+      const downloadUrl = (result as any)?.download_url || '';
 
       // 5. Create final attachment with available status
       const completedAttachment: AttachmentDoc = {
@@ -138,9 +139,12 @@ export function useFileUpload(config: UseFileUploadConfig) {
         name: file.name,
         mime: file.type,
         size: file.size,
-        upload_url: upload_url, // Use presigned URL (or get download URL from result)
+        // Never leak presigned upload URLs back into agent state; prefer a download URL if provided
+        upload_url: downloadUrl,
         state: result.status === 'available' ? 'available' : 'uploaded',
-        metadata: {},
+        metadata: downloadUrl
+          ? { download_url: downloadUrl }
+          : {},
       };
 
       // Update local state
