@@ -38,13 +38,26 @@ export function useConversation(
 
   const messages = createMemo(() => {
     const cid = conversationId();
+    console.log('[useConversation.messages] 🔍 Querying for conversationId:', cid);
     if (!cid) return [];
 
-    const messageIds = ctx.state.messagesByConversation[cid] || [];
-    console.log('[useConversation.messages] messageIds from state:', messageIds);
+    // CRITICAL: Access the entire messagesByConversation object first to establish tracking
+    // This ensures SolidJS tracks changes to the object before accessing the specific key
+    const allConversations = ctx.state.messagesByConversation;
+    console.log('[useConversation.messages] 🔍 allConversations keys:', Object.keys(allConversations));
 
+    // Now access the specific conversation's messages
+    const messageIds = allConversations[cid] ?? [];
+    console.log('[useConversation.messages] 🔍 messageIds from state:', messageIds);
+    console.log('[useConversation.messages] 🔍 messageIds length:', messageIds.length);
+
+    // Map to actual message objects - access entire messages object first for tracking
+    const allMessages = ctx.state.messages;
     const mappedMessages = messageIds
-      .map(mid => ctx.state.messages[mid])
+      .map(mid => {
+        const msg = allMessages[mid];
+        return msg;
+      })
       .filter(Boolean);
     console.log('[useConversation.messages] mapped message count:', mappedMessages.length);
     console.log('[useConversation.messages] mapped message IDs:', mappedMessages.map(m => m.id));
