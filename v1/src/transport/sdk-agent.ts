@@ -15,6 +15,7 @@ export interface SdkAgentOptions {
   conversationsEndpoint?: string; // For conversation CRUD
   getConversationState?: (conversationId: string) => any; // Optional state getter
   getGlobalState?: () => any; // Optional global state getter (for attachments, etc.)
+  customFetch?: typeof fetch; // Optional custom fetch (e.g., with auto token refresh)
 }
 
 /**
@@ -28,6 +29,7 @@ export class SdkAgClient implements AgUiClient {
   private agentEndpointPath: string;
   private getConversationState?: (conversationId: string) => any;
   private getGlobalState?: () => any;
+  private customFetch?: typeof fetch;
   private listeners = new Map<string, Set<Function>>();
 
   // Client-side state management
@@ -49,10 +51,6 @@ export class SdkAgClient implements AgUiClient {
   // Map assistant messageId -> runId for server-side cancellation
   private activeRunByMessageId = new Map<string, string>();
 
-  // Token refresh state management
-  private isRefreshing: boolean = false;
-  private refreshPromise: Promise<void> | null = null;
-
   constructor(options: SdkAgentOptions) {
     this.baseUrl = options.baseUrl;
     this.headers = options.headers || {};
@@ -60,6 +58,7 @@ export class SdkAgClient implements AgUiClient {
     this.agentEndpointPath = options.agentEndpoint || '/agent/run';
     this.getConversationState = options.getConversationState;
     this.getGlobalState = options.getGlobalState;
+    this.customFetch = options.customFetch;
 
     // Create SDK HttpAgent
     this.agent = new HttpAgent({
@@ -105,90 +104,18 @@ export class SdkAgClient implements AgUiClient {
   }
 
   // ============================================================================
-  // Token Refresh (Automatic Authentication)
-  // ============================================================================
-
-  /**
-   * Refresh access token using refresh token from HTTP-only cookie
-   */
-  private async refreshTokens(): Promise<void> {
-    try {
-      console.log('[SdkAgClient] Refreshing tokens...');
-      const response = await fetch(`${this.baseUrl}/nova/idm/auth/token/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        console.error('[SdkAgClient] Token refresh failed, redirecting to login');
-        // Redirect to login if refresh fails
-        window.location.href = '/supernova/login';
-        throw new Error('Token refresh failed');
-      }
-
-      console.log('[SdkAgClient] Token refresh successful');
-    } catch (error) {
-      console.error('[SdkAgClient] Error during token refresh:', error);
-      // Redirect to login on refresh failure
-      window.location.href = '/supernova/login';
-      throw error;
-    }
-  }
-
-  /**
-   * Fetch wrapper with automatic token refresh on 401
-   */
-  private async fetchWithAuth(
-    url: string,
-    options: RequestInit = {},
-    retryCount: number = 0
-  ): Promise<Response> {
-    const config: RequestInit = {
-      ...options,
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.headers,
-        ...options.headers,
-      },
-    };
-
-    const response = await fetch(url, config);
-
-    // Handle 401 with automatic token refresh
-    if (response.status === 401 && retryCount === 0) {
-      console.log('[SdkAgClient] Received 401, attempting token refresh...');
-
-      // If a refresh is already in progress, wait for it
-      if (this.isRefreshing && this.refreshPromise) {
-        await this.refreshPromise;
-      } else {
-        // Start a new refresh
-        this.isRefreshing = true;
-        this.refreshPromise = this.refreshTokens().finally(() => {
-          this.isRefreshing = false;
-          this.refreshPromise = null;
-        });
-        await this.refreshPromise;
-      }
-
-      // Retry the original request once after refresh
-      return this.fetchWithAuth(url, options, retryCount + 1);
-    }
-
-    return response;
-  }
-
-  // ============================================================================
   // Conversation Management (REST APIs)
   // ============================================================================
 
   async createConversation(title?: string, metadata?: Record<string, unknown>): Promise<ConversationDoc> {
-    const res = await this.fetchWithAuth(`${this.baseUrl}${this.conversationsEndpoint}`, {
+    const fetchFn = this.customFetch || fetch.bind(globalThis);
+    const res = await fetchFn(`${this.baseUrl}${this.conversationsEndpoint}`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.headers,
+      },
+      credentials: 'include',
       body: JSON.stringify({ title, metadata }),
     });
 
@@ -210,7 +137,11 @@ export class SdkAgClient implements AgUiClient {
   }
 
   async listConversations(): Promise<ConversationDoc[]> {
-    const res = await this.fetchWithAuth(`${this.baseUrl}${this.conversationsEndpoint}`);
+    const fetchFn = this.customFetch || fetch.bind(globalThis);
+    const res = await fetchFn(`${this.baseUrl}${this.conversationsEndpoint}`, {
+      headers: this.headers,
+      credentials: 'include',
+    });
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => '');
@@ -222,7 +153,11 @@ export class SdkAgClient implements AgUiClient {
   }
 
   async getConversation(id: Id): Promise<ConversationDoc> {
-    const res = await this.fetchWithAuth(`${this.baseUrl}${this.conversationsEndpoint}/${id}`);
+    const fetchFn = this.customFetch || fetch.bind(globalThis);
+    const res = await fetchFn(`${this.baseUrl}${this.conversationsEndpoint}/${id}`, {
+      headers: this.headers,
+      credentials: 'include',
+    });
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => '');
@@ -233,8 +168,14 @@ export class SdkAgClient implements AgUiClient {
   }
 
   async updateConversation(id: Id, updates: Partial<ConversationDoc>): Promise<ConversationDoc> {
-    const res = await this.fetchWithAuth(`${this.baseUrl}${this.conversationsEndpoint}/${id}`, {
+    const fetchFn = this.customFetch || fetch.bind(globalThis);
+    const res = await fetchFn(`${this.baseUrl}${this.conversationsEndpoint}/${id}`, {
       method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.headers,
+      },
+      credentials: 'include',
       body: JSON.stringify(updates),
     });
 
@@ -249,8 +190,11 @@ export class SdkAgClient implements AgUiClient {
   }
 
   async archiveConversation(id: Id): Promise<void> {
-    const res = await this.fetchWithAuth(`${this.baseUrl}${this.conversationsEndpoint}/${id}`, {
+    const fetchFn = this.customFetch || fetch.bind(globalThis);
+    const res = await fetchFn(`${this.baseUrl}${this.conversationsEndpoint}/${id}`, {
       method: 'DELETE',
+      headers: this.headers,
+      credentials: 'include',
     });
 
     if (!res.ok) {
@@ -589,7 +533,11 @@ export class SdkAgClient implements AgUiClient {
 
   async getMessages(conversationId: Id): Promise<MessageDoc[]> {
     const endpoint = `${this.conversationsEndpoint}/${conversationId}/messages`;
-    const res = await this.fetchWithAuth(`${this.baseUrl}${endpoint}`);
+    const fetchFn = this.customFetch || fetch.bind(globalThis);
+    const res = await fetchFn(`${this.baseUrl}${endpoint}`, {
+      headers: this.headers,
+      credentials: 'include',
+    });
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => '');
@@ -623,8 +571,14 @@ export class SdkAgClient implements AgUiClient {
       const runId = this.activeRunByMessageId.get(messageId);
       if (runId && this.agentEndpointPath.includes('/ag-ui')) {
         const cancelUrl = `${this.baseUrl}${this.agentEndpointPath}/cancel`;
-        await this.fetchWithAuth(cancelUrl, {
+        const fetchFn = this.customFetch || fetch.bind(globalThis);
+        await fetchFn(cancelUrl, {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.headers,
+          },
+          credentials: 'include',
           body: JSON.stringify({ runId }),
         }).catch(() => void 0);
       }
@@ -636,8 +590,14 @@ export class SdkAgClient implements AgUiClient {
     if (partialContent) {
       try {
         const endpoint = `${this.conversationsEndpoint}/${conversationId}/messages/${messageId}`;
-        await this.fetchWithAuth(`${this.baseUrl}${endpoint}`, {
+        const fetchFn = this.customFetch || fetch.bind(globalThis);
+        await fetchFn(`${this.baseUrl}${endpoint}`, {
           method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.headers
+          },
+          credentials: 'include',
           body: JSON.stringify({
             content: partialContent,
             status: 'canceled'
