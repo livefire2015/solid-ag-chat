@@ -54,6 +54,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   // Track which conversations have been loaded from server to prevent duplicate loads
   const loadedConversations = new Set<string>();
+  const loadingConversations = new Set<string>();
 
   // If client is SdkAgClient, provide state getters for bidirectional state flow
   if ('getConversationState' in client && typeof (client as any).getConversationState === 'undefined') {
@@ -72,27 +73,8 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   // NOTE: Auto-save moved to ChatProvider.tsx where it runs in proper reactive context
   // createEffect outside a component doesn't track dependencies properly
 
-  // Multi-tab synchronization via storage events
-  const handleStorageChange = (event: StorageEvent) => {
-    if (event.key === 'solid-ag-chat:agentState' && event.newValue) {
-      try {
-        const parsed = JSON.parse(event.newValue);
-        if (parsed.version === 1) {
-          console.log('[store] Syncing agent state from another tab');
-
-          // Update state with data from other tab
-          // Note: This will trigger auto-save in ChatProvider, which is fine
-          // Storage events only fire in OTHER tabs, not the one that made the change
-          setState('agentStateByConversation', parsed.data);
-        }
-      } catch (error) {
-        console.error('[store] Failed to sync from storage event:', error);
-      }
-    }
-  };
-
-  // Register storage event listener
-  window.addEventListener('storage', handleStorageChange);
+  // Multi-tab synchronization REMOVED to fix streaming message display issue
+  // The sync loop was overwriting streaming messages, causing them to disappear
 
   // Subscribe to all normalized events
   client.on('conversation.created', (payload) => {
@@ -126,6 +108,7 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
 
   // Official AG-UI events for text streaming
   client.on('TEXT_MESSAGE_START', (payload) => {
+    console.log('[Store.TEXT_MESSAGE_START] 📝 Handler called:', payload);
     const p = payload as any;
     const msg = {
       id: p.messageId,
@@ -135,16 +118,24 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
       status: 'streaming' as const,
       createdAt: new Date().toISOString(),
     };
+    console.log('[Store.TEXT_MESSAGE_START] Creating message:', msg);
     setState('messages', msg.id, msg);
     if (msg.conversationId) {
-      setState('messagesByConversation', msg.conversationId, (arr = []) =>
-        arr.includes(msg.id) ? arr : [...arr, msg.id]
-      );
+      // Ensure array exists and update reactively by always creating new array
+      const currentArray = state.messagesByConversation[msg.conversationId] || [];
+      if (!currentArray.includes(msg.id)) {
+        setState('messagesByConversation', msg.conversationId, [...currentArray, msg.id]);
+      }
     }
     setState('streaming', msg.id, { text: '' });
+    console.log('[Store.TEXT_MESSAGE_START] Message created, streaming initialized');
+    console.log('[Store.TEXT_MESSAGE_START] 🔍 messagesByConversation for', msg.conversationId, ':', state.messagesByConversation[msg.conversationId]);
+    console.log('[Store.TEXT_MESSAGE_START] 🔍 activeConversationId:', state.activeConversationId);
+    console.log('[Store.TEXT_MESSAGE_START] 🔍 Match?', msg.conversationId === state.activeConversationId);
   });
 
   client.on('TEXT_MESSAGE_CONTENT', (payload) => {
+    console.log('[Store.TEXT_MESSAGE_CONTENT] 📝 Delta received:', payload);
     const { messageId, delta } = payload as any;
     setState('streaming', messageId, (s = { text: '' }) => ({
       text: s.text + (delta || '')
@@ -152,13 +143,16 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   });
 
   client.on('TEXT_MESSAGE_END', (payload) => {
+    console.log('[Store.TEXT_MESSAGE_END] 📝 Message complete:', payload);
     const { messageId } = payload as any;
     const streamingText = state.streaming[messageId]?.text;
+    console.log('[Store.TEXT_MESSAGE_END] Final streaming text length:', streamingText?.length || 0);
     if (streamingText) {
       setState('messages', messageId, 'content', streamingText);
     }
     setState('streaming', messageId, undefined!);
     setState('messages', messageId, 'status', 'completed');
+    console.log('[Store.TEXT_MESSAGE_END] Message finalized, status set to completed');
   });
 
   client.on('message.errored', (payload) => {
@@ -429,68 +423,107 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
   const loadMessages = async (conversationId: Id, force = false) => {
     console.log('[loadMessages] Loading messages for conversation:', conversationId, 'force:', force);
 
+    // Don't start another fetch while one is already in-flight for the same conversation
+    if (loadingConversations.has(conversationId)) {
+      console.log('[loadMessages] Load already in progress, skipping duplicate request');
+      return;
+    }
+
     // Skip if already loaded (unless forced)
     if (!force && loadedConversations.has(conversationId)) {
       console.log('[loadMessages] Already loaded, skipping');
       return;
     }
 
-    // Set active thread when loading messages for a conversation
-    if (client.setActiveThread) {
-      client.setActiveThread(conversationId);
+    loadingConversations.add(conversationId);
+
+    try {
+      // Set active thread when loading messages for a conversation
+      if (client.setActiveThread) {
+        client.setActiveThread(conversationId);
+      }
+
+      // Get current messages to preserve optimistic/streaming ones
+      const currentMessageIds = state.messagesByConversation[conversationId] || [];
+      const currentMessages = currentMessageIds
+        .map(id => state.messages[id])
+        .filter(Boolean);
+
+      console.log('[loadMessages] Current messages before fetch:', currentMessages.length);
+
+      const messages = await client.getMessages(conversationId);
+      console.log('[loadMessages] Received', messages.length, 'messages from API');
+
+      // RE-CHECK current messages AFTER API call (might have changed during async)
+      const currentMessageIdsAfterFetch = state.messagesByConversation[conversationId] || [];
+      const currentMessagesAfterFetch = currentMessageIdsAfterFetch
+        .map(id => state.messages[id])
+        .filter(Boolean);
+
+      console.log('[loadMessages] 🔍 Messages AFTER fetch:', currentMessagesAfterFetch.length);
+      console.log('[loadMessages] 🔍 Message statuses:', currentMessagesAfterFetch.map(m => `${m.id.slice(0, 8)}: ${m.status}`));
+
+      // REPLACE strategy with PRESERVATION:
+      // Keep messages that are:
+      // 1. Still streaming (status='streaming')
+      // 2. Optimistic user messages (id starts with 'msg_')
+      const preserveMessages = currentMessagesAfterFetch.filter(m =>
+        m.status === 'streaming' || m.id.startsWith('msg_')
+      );
+      console.log('[loadMessages] Preserving', preserveMessages.length, 'optimistic/streaming messages:', preserveMessages.map(m => m.id));
+
+      // Combine: preserved + server messages (dedupe by ID, server takes precedence)
+      const serverIds = new Set(messages.map(m => m.id));
+      const finalMessages = [
+        ...preserveMessages.filter(m => !serverIds.has(m.id)),
+        ...messages
+      ];
+
+      // Sort by createdAt to maintain chronological order
+      finalMessages.sort((a, b) =>
+        new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+      );
+
+      console.log('[loadMessages] Final message count:', finalMessages.length, 'IDs:', finalMessages.map(m => m.id));
+
+      // Add all messages (preserved + server)
+      const messageIds: string[] = [];
+      finalMessages.forEach(m => {
+        setState('messages', m.id, m);
+        messageIds.push(m.id);
+      });
+
+      const incomingIdSet = new Set(messageIds);
+      let mergedMessageIds: string[] = [];
+
+      // Merge with any streaming/optimistic messages that arrived mid-flight
+      setState('messagesByConversation', conversationId, (prev = []) => {
+        const carryOverIds = prev
+          .map(id => state.messages[id])
+          .filter(Boolean)
+          .filter(m => (m.status === 'streaming' || m.id.startsWith('msg_')) && !incomingIdSet.has(m.id))
+          .map(m => m.id);
+
+        mergedMessageIds = [...messageIds, ...carryOverIds];
+        return mergedMessageIds;
+      });
+
+      // Mark as loaded after successful merge
+      loadedConversations.add(conversationId);
+
+      console.log(
+        '[loadMessages] Replaced with',
+        finalMessages.length,
+        'messages (',
+        preserveMessages.filter(m => !serverIds.has(m.id)).length,
+        'preserved +',
+        messages.length,
+        'from server). Final IDs:',
+        mergedMessageIds
+      );
+    } finally {
+      loadingConversations.delete(conversationId);
     }
-
-    // Get current messages to preserve optimistic/streaming ones
-    const currentMessageIds = state.messagesByConversation[conversationId] || [];
-    const currentMessages = currentMessageIds
-      .map(id => state.messages[id])
-      .filter(Boolean);
-
-    console.log('[loadMessages] Current messages before fetch:', currentMessages.length);
-
-    const messages = await client.getMessages(conversationId);
-    console.log('[loadMessages] Received', messages.length, 'messages from API');
-
-    // REPLACE strategy with PRESERVATION:
-    // Keep messages that are:
-    // 1. Still streaming (status='streaming')
-    // 2. Optimistic user messages (id starts with 'msg_')
-    const preserveMessages = currentMessages.filter(m =>
-      m.status === 'streaming' || m.id.startsWith('msg_')
-    );
-    console.log('[loadMessages] Preserving', preserveMessages.length, 'optimistic/streaming messages:', preserveMessages.map(m => m.id));
-
-    // Combine: preserved + server messages (dedupe by ID, server takes precedence)
-    const serverIds = new Set(messages.map(m => m.id));
-    const finalMessages = [
-      ...preserveMessages.filter(m => !serverIds.has(m.id)),
-      ...messages
-    ];
-
-    // Sort by createdAt to maintain chronological order
-    finalMessages.sort((a, b) =>
-      new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-    );
-
-    console.log('[loadMessages] Final message count:', finalMessages.length, 'IDs:', finalMessages.map(m => m.id));
-
-    // 1. Clear message IDs for this conversation
-    setState('messagesByConversation', conversationId, []);
-
-    // 2. Add all messages (preserved + server)
-    const messageIds: string[] = [];
-    finalMessages.forEach(m => {
-      setState('messages', m.id, m);
-      messageIds.push(m.id);
-    });
-
-    // 3. Set the new message ID array (ordered)
-    setState('messagesByConversation', conversationId, messageIds);
-
-    // 4. Mark as loaded
-    loadedConversations.add(conversationId);
-
-    console.log('[loadMessages] Replaced with', finalMessages.length, 'messages (', preserveMessages.filter(m => !serverIds.has(m.id)).length, 'preserved +', messages.length, 'from server)');
   };
 
   const sendMessage = async (
@@ -535,8 +568,6 @@ export function createAgUiStore(client: AgUiClient): AgUiStore {
     sendMessage,
     cancelMessage,
     close: () => {
-      // Cleanup storage event listener
-      window.removeEventListener('storage', handleStorageChange);
       client.close();
     },
 
