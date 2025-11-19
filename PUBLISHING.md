@@ -2,6 +2,18 @@
 
 This guide explains how to publish @livefire2015/solid-ag-chat to npm.
 
+## Version Overview
+
+The project contains three versions that can be published independently:
+
+| Version | Directory | npm Package Version | Status |
+|---------|-----------|---------------------|--------|
+| v2 | `v2/` | 2.x.x | **Current** (Recommended) |
+| v1 | `v1/` | 1.x.x | Previous |
+| v0 | `v0/` | 0.x.x | Deprecated |
+
+**Note**: Each version directory has its own `package.json` with its own version number.
+
 ## Prerequisites
 
 Before publishing, ensure you have:
@@ -365,3 +377,61 @@ git push --tags
 ```
 
 Done! Your package is now published to npm!
+
+## Publishing Different Versions
+
+### Publishing v2 (Current)
+
+```bash
+cd v2
+npm run build
+npm version minor -m "Release v%s: New feature"
+npm publish
+git push && git push --tags
+```
+
+### Publishing v1 (Previous)
+
+```bash
+cd v1
+npm run build
+npm version patch -m "Release v%s: Bug fix"
+npm publish
+git push && git push --tags
+```
+
+### Publishing v0 (Deprecated)
+
+**Note**: v0 is deprecated. Only publish critical security fixes.
+
+```bash
+cd v0
+npm run build
+npm version patch -m "Release v%s: Security fix"
+npm publish
+git push && git push --tags
+
+# Mark as deprecated
+npm deprecate @livefire2015/solid-ag-chat@0.x.x "Please upgrade to v2"
+```
+
+### Version-Specific Build Outputs
+
+| Version | ES Module | CommonJS | Types |
+|---------|-----------|----------|-------|
+| v2 | `dist/index.js` | `dist/index.cjs` | `dist/index.d.ts` |
+| v1 | `dist/index.js` | `dist/index.cjs` | `dist/index.d.ts` |
+| v0 | `dist/index.js` | `dist/index.cjs` | `dist/index.d.ts` |
+
+### Checking Published Versions
+
+```bash
+# View all published versions
+npm view @livefire2015/solid-ag-chat versions
+
+# View specific version info
+npm view @livefire2015/solid-ag-chat@2.0.0
+
+# Check deprecation status
+npm view @livefire2015/solid-ag-chat deprecated
+```

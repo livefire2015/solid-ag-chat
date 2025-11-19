@@ -2,6 +2,18 @@
 
 This guide shows how to use @livefire2015/solid-ag-chat in other applications during local development without publishing to npm.
 
+## Version Selection
+
+The library has three versions available:
+
+| Version | Directory | Status | Use Case |
+|---------|-----------|--------|----------|
+| v2 | `v2/` | **Current** | Bidirectional tool execution (recommended) |
+| v1 | `v1/` | Previous | Official AG-UI protocol support |
+| v0 | `v0/` | Deprecated | Legacy with built-in UI components |
+
+**Note**: Throughout this guide, replace `v2` with `v1` or `v0` if you need to work with those versions.
+
 ## Table of Contents
 
 - [Method 1: npm link (Recommended)](#method-1-npm-link-recommended)
@@ -538,3 +550,51 @@ Consider publishing when:
 - Want public distribution
 
 During development, local methods are faster and more flexible!
+
+## Working with Different Versions
+
+### Linking a Specific Version
+
+```bash
+# For v2 (recommended)
+cd /path/to/solid-ag-chat/v2
+npm run build && npm link
+
+# For v1
+cd /path/to/solid-ag-chat/v1
+npm run build && npm link
+
+# For v0
+cd /path/to/solid-ag-chat/v0
+npm run build && npm link
+```
+
+### Version-Specific Imports
+
+```tsx
+// v2 - Bidirectional tool execution
+import { ChatProvider, useConversation, useToolExecution } from '@livefire2015/solid-ag-chat';
+
+// v1 - AG-UI protocol support
+import { ChatProvider, useConversation, useMessages } from '@livefire2015/solid-ag-chat';
+
+// v0 - Built-in UI components
+import { ChatContainer, MessageList, Composer } from '@livefire2015/solid-ag-chat';
+```
+
+### Switching Between Versions
+
+To switch from one version to another:
+
+```bash
+# Unlink current version
+npm unlink @livefire2015/solid-ag-chat
+
+# Link new version
+cd /path/to/solid-ag-chat/v1  # or v0, v2
+npm run build
+npm link
+
+# In your app
+npm link @livefire2015/solid-ag-chat
+```

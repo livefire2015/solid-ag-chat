@@ -2,6 +2,18 @@
 
 Quick reference for using @livefire2015/solid-ag-chat locally without publishing to npm.
 
+## Version Selection
+
+| Version | Directory | Status | Description |
+|---------|-----------|--------|-------------|
+| **v2** | `v2/` | Current | Bidirectional tool execution (recommended) |
+| v1 | `v1/` | Previous | AG-UI protocol support |
+| v0 | `v0/` | Deprecated | Built-in UI components |
+
+**Note**: Examples below use v2. Replace with `v1` or `v0` as needed.
+
+---
+
 ## Quick Start (2 minutes)
 
 ### Method 1: npm link (Recommended)
@@ -209,6 +221,45 @@ npm link @livefire2015/solid-ag-chat
 # Switch back to npm version
 npm unlink @livefire2015/solid-ag-chat
 npm install @livefire2015/solid-ag-chat
+```
+
+---
+
+## Working with All Versions
+
+### Quick Link Commands
+
+```bash
+# v2 (Current - Recommended)
+cd solid-ag-chat/v2 && npm run build && npm link
+
+# v1 (Previous)
+cd solid-ag-chat/v1 && npm run build && npm link
+
+# v0 (Deprecated)
+cd solid-ag-chat/v0 && npm run build && npm link
+```
+
+### Version-Specific Features
+
+| Version | Key Exports |
+|---------|-------------|
+| v2 | `useToolExecution`, `useToolCalls`, `usePendingTools` |
+| v1 | `useConversation`, `useMessages`, `useStreamingText` |
+| v0 | `ChatContainer`, `MessageList`, `Composer` |
+
+### Switching Versions
+
+```bash
+# Unlink current
+npm unlink @livefire2015/solid-ag-chat
+
+# Link different version
+cd solid-ag-chat/v1  # or v0, v2
+npm run build && npm link
+
+# In your app
+npm link @livefire2015/solid-ag-chat
 ```
 
 ---

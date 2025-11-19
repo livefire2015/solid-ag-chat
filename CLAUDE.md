@@ -4,11 +4,31 @@
 
 ## Development Setup
 
-Key commands include `npm run dev` for watch mode (rebuilds on source changes), and `npm run build` for production builds. The main development happens in the `v2/` directory which contains the latest version.
+The project contains three versions in separate directories:
+
+```bash
+# v2 (Current - Recommended)
+cd v2 && npm run dev    # Watch mode
+cd v2 && npm run build  # Production build
+
+# v1 (Previous)
+cd v1 && npm run dev
+cd v1 && npm run build
+
+# v0 (Deprecated)
+cd v0 && npm run dev
+cd v0 && npm run build
+```
 
 ## Architecture Highlights
 
-The library exports hooks and utilities through `v2/src/index.ts`. Components reside in `v2/src/primitives/` with state management in `v2/src/store/`. It builds to ES module and CommonJS formats with peer dependencies on solid-js that consuming applications must provide.
+Each version has its own architecture:
+
+- **v2**: Exports through `v2/src/index.ts`, primitives in `v2/src/primitives/`, state in `v2/src/store/`
+- **v1**: Exports through `v1/src/index.ts`, similar structure to v2 but without tool execution
+- **v0**: Exports through `v0/src/index.tsx`, includes built-in UI components
+
+All versions build to ES module and CommonJS formats with peer dependencies on solid-js.
 
 ## Version Structure
 

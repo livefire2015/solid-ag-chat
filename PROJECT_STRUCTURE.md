@@ -35,7 +35,35 @@ solid-ag-chat/
 │   ├── vite.config.ts
 │   └── README.md
 ├── v1/                          # v1.0.7 - Official AG-UI protocol support
-├── v0/                          # DEPRECATED - Legacy version
+│   ├── src/
+│   │   ├── index.ts             # Main exports
+│   │   ├── types.ts             # Type definitions
+│   │   ├── primitives/          # SolidJS hooks (no tool execution)
+│   │   │   ├── ChatProvider.tsx
+│   │   │   ├── useChat.ts
+│   │   │   ├── useConversation.ts
+│   │   │   ├── useConversationList.ts
+│   │   │   ├── useMessages.ts
+│   │   │   └── useStreamingText.ts
+│   │   ├── store/               # State management
+│   │   └── transport/           # Client implementations
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
+├── v0/                          # DEPRECATED - Legacy version with UI
+│   ├── src/
+│   │   ├── index.tsx            # Main exports (note: .tsx)
+│   │   ├── components/          # Built-in UI components
+│   │   │   ├── ChatContainer.tsx
+│   │   │   ├── MessageList.tsx
+│   │   │   ├── Message.tsx
+│   │   │   └── Composer.tsx
+│   │   ├── hooks/               # Chat hooks
+│   │   │   └── useChatStream.ts
+│   │   └── stores/              # Multiple storage modes
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
 ├── CLAUDE.md                    # AI assistant instructions
 ├── LOCAL_DEVELOPMENT.md         # Local development guide
 ├── LOCAL_DEV_QUICKSTART.md      # Quick start for local dev
@@ -197,48 +225,115 @@ External dependencies (not bundled): solid-js, solid-js/web, fast-json-patch, @a
 | v1 | Previous | Official AG-UI protocol, hooks pattern |
 | v2 | Current | Bidirectional tool execution, enhanced state tracking |
 
+### v0 Details (Deprecated)
+
+- **Architecture**: Complete UI component library
+- **Key Exports**: `ChatContainer`, `MessageList`, `Message`, `Composer`, `useChatStream`
+- **Storage Modes**: Local, remote, IndexedDB
+- **Use Case**: Quick prototyping with pre-built UI
+
+### v1 Details (Previous)
+
+- **Architecture**: Hooks-based library (no UI components)
+- **Key Exports**: `ChatProvider`, `useConversation`, `useMessages`, `useStreamingText`
+- **Protocol**: Official AG-UI protocol support
+- **Use Case**: Custom UI with AG-UI backend
+
+### v2 Details (Current)
+
+- **Architecture**: Hooks-based with bidirectional tool execution
+- **Key Exports**: All v1 exports + `useToolCalls`, `useToolExecution`, `usePendingTools`
+- **Protocol**: Full AG-UI protocol with tool execution
+- **Use Case**: AI agents with tool calling capabilities
+
 ## Development Commands
+
+### v2 (Recommended)
 
 ```bash
 cd v2
+npm run build      # Build for distribution
+npm run dev        # Watch mode for development
+npm run build:js   # Build JS and declarations
+```
 
-# Build for distribution
-npm run build
+### v1
 
-# Watch mode for development
-npm run dev
+```bash
+cd v1
+npm run build      # Build for distribution
+npm run dev        # Watch mode for development
+```
 
-# Build JS and declarations
-npm run build:js
+### v0
+
+```bash
+cd v0
+npm run build      # Build for distribution
+npm run dev        # Watch mode for development
 ```
 
 ## Exported APIs
 
-### Transport Layer
+### v2 Exports
+
 ```typescript
+// Transport Layer
 export { SdkAgClient, createSdkAgent } from './transport/sdk-agent';
 export { SseAgClient } from './transport/sse';
-```
 
-### Primitives
-```typescript
+// Primitives
 export { ChatProvider, useChatContext } from './primitives/ChatProvider';
 export { useChat } from './primitives/useChat';
 export { useConversation } from './primitives/useConversation';
 export { useConversationList } from './primitives/useConversationList';
 export { useMessages } from './primitives/useMessages';
 export { useStreamingText } from './primitives/useStreamingText';
-export { useToolCalls } from './primitives/useToolCalls';
-export { useToolExecution } from './primitives/useToolExecution';
-export { usePendingTools } from './primitives/usePendingTools';
-```
+export { useToolCalls } from './primitives/useToolCalls';          // V2 only
+export { useToolExecution } from './primitives/useToolExecution';  // V2 only
+export { usePendingTools } from './primitives/usePendingTools';    // V2 only
 
-### Utilities
-```typescript
+// Utilities
 export { createAgUiStore } from './store/createAgUiStore';
-export { ToolExecutor } from './tool-executor';
+export { ToolExecutor } from './tool-executor';                    // V2 only
 export { MockAgClient } from './testing/mockClient';
 export { runBasicScenario } from './testing/scenarios';
+```
+
+### v1 Exports
+
+```typescript
+// Transport Layer
+export { SdkAgClient, createSdkAgent } from './transport/sdk-agent';
+export { SseAgClient } from './transport/sse';
+
+// Primitives
+export { ChatProvider, useChatContext } from './primitives/ChatProvider';
+export { useChat } from './primitives/useChat';
+export { useConversation } from './primitives/useConversation';
+export { useConversationList } from './primitives/useConversationList';
+export { useMessages } from './primitives/useMessages';
+export { useStreamingText } from './primitives/useStreamingText';
+
+// Utilities
+export { createAgUiStore } from './store/createAgUiStore';
+```
+
+### v0 Exports
+
+```typescript
+// Components (Pre-built UI)
+export { ChatContainer } from './components/ChatContainer';
+export { MessageList } from './components/MessageList';
+export { Message } from './components/Message';
+export { Composer } from './components/Composer';
+
+// Hooks
+export { useChatStream } from './hooks/useChatStream';
+
+// Stores
+export { createLocalStore } from './stores/local';
+export { createRemoteStore } from './stores/remote';
 ```
 
 ## Testing
